@@ -96,8 +96,10 @@ function initScene() {
   createClouds();
   createWeatherSystem();
   createSkybox();
+  createGhostBlock();  // Block placement preview
   createUI();
-  
+  updateBlockSelectorUI();  // Initialize block selector UI
+
   window.addEventListener('resize', onWindowResize);
   console.log('Moltcraft Ultimate Scene initialized');
 }
@@ -455,34 +457,65 @@ function createUI() {
   const overlay = document.createElement('div');
   overlay.id = 'ui-overlay';
   overlay.innerHTML = `
-    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:20px;pointer-events:none;">
-      <div style="position:absolute;top:50%;left:0;width:20px;height:2px;background:white;transform:translateY(-50%);"></div>
-      <div style="position:absolute;top:0;left:50%;width:2px;height:20px;background:white;transform:translateX(-50%);"></div>
+    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;pointer-events:none;z-index:1000;">
+      <div style="position:absolute;top:50%;left:0;width:24px;height:2px;background:rgba(255,255,255,0.8);transform:translateY(-50%);border-radius:1px;"></div>
+      <div style="position:absolute;top:0;left:50%;width:2px;height:24px;background:rgba(255,255,255,0.8);transform:translateX(-50%);border-radius:1px;"></div>
+      <div style="position:absolute;top:50%;left:50%;width:4px;height:4px;background:white;transform:translate(-50%,-50%);border-radius:50%;"></div>
     </div>
-    <div id="block-selector" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:5px;background:rgba(0,0,0,0.5);padding:10px;border-radius:10px;">
-      <button class="block-btn" style="background:stone;color:white;padding:8px 12px;border:none;cursor:pointer;">1</button>
-      <button class="block-btn" style="background:#5C4033;color:white;padding:8px 12px;border:none;cursor:pointer;">2</button>
-      <button class="block-btn" style="background:#8B0000;color:white;padding:8px 12px;border:none;cursor:pointer;">3</button>
-      <button class="block-btn" style="background:#ADD8E6;color:black;padding:8px 12px;border:none;cursor:pointer;">4</button>
-      <button class="block-btn" style="background:#FF6600;color:white;padding:8px 12px;border:none;cursor:pointer;">5</button>
+    <div id="block-selector" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;background:rgba(0,0,0,0.6);padding:12px;border-radius:12px;backdrop-filter:blur(5px);">
+      <button class="block-btn" data-type="stone" style="width:50px;height:50px;background:linear-gradient(135deg,#696969,#808080);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
+        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:white;font-weight:bold;">1</span>
+      </button>
+      <button class="block-btn" data-type="wood" style="width:50px;height:50px;background:linear-gradient(135deg,#5C4033,#8B4513);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
+        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:white;font-weight:bold;">2</span>
+      </button>
+      <button class="block-btn" data-type="brick" style="width:50px;height:50px;background:linear-gradient(135deg,#8B0000,#A52A2A);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
+        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:white;font-weight:bold;">3</span>
+      </button>
+      <button class="block-btn" data-type="glass" style="width:50px;height:50px;background:linear-gradient(135deg,rgba(173,216,230,0.6),rgba(135,206,235,0.8));border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
+        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:black;font-weight:bold;">4</span>
+      </button>
+      <button class="block-btn" data-type="torch" style="width:50px;height:50px;background:linear-gradient(135deg,#FF6600,#FF8C00);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
+        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:black;font-weight:bold;">5</span>
+      </button>
     </div>
-    <div style="position:fixed;top:20px;left:20px;color:white;background:rgba(0,0,0,0.5);padding:10px;border-radius:5px;font-family:monospace;">
-      WASD: Move | Click: Place | Shift+Click: Remove | T: Chat | 1-5: Blocks
+    <div style="position:fixed;top:20px;left:20px;color:white;background:rgba(0,0,0,0.6);padding:12px;border-radius:8px;font-family:monospace;font-size:13px;backdrop-filter:blur(5px);">
+      <div>🕹️ WASD: Move | SPACE: Jump</div>
+      <div>🖱️ Click: Place Block | Shift+Click: Remove</div>
+      <div>⌨️ 1-5: Select Block | T: Chat</div>
     </div>
-    <div style="position:fixed;top:20px;right:20px;color:white;background:rgba(0,0,0,0.5);padding:10px;border-radius:5px;font-family:monospace;">
-      Time: <span id="time-value">12:00</span>
+    <div style="position:fixed;top:20px;right:20px;color:white;background:rgba(0,0,0,0.6);padding:12px;border-radius:8px;font-family:monospace;font-size:13px;backdrop-filter:blur(5px);">
+      <div>⏰ Time: <span id="time-value">12:00</span></div>
+      <div>🌤️ Weather: <span id="weather-value">CLEAR</span></div>
     </div>
-    <div style="position:fixed;top:50px;right:20px;color:white;background:rgba(0,0,0,0.5);padding:10px;border-radius:5px;font-family:monospace;">
-      Weather: <span id="weather-value">CLEAR</span>
+    <div style="position:fixed;bottom:90px;right:20px;display:flex;gap:5px;">
+      <button onclick="setWeather('clear')" style="background:#87CEEB;color:black;padding:8px 12px;border:none;cursor:pointer;border-radius:5px;font-size:16px;" title="Clear">☀️</button>
+      <button onclick="setWeather('rain')" style="background:#3498DB;color:white;padding:8px 12px;border:none;cursor:pointer;border-radius:5px;font-size:16px;" title="Rain">🌧️</button>
+      <button onclick="setWeather('snow')" style="background:#FFFFFF;color:black;padding:8px 12px;border:none;cursor:pointer;border-radius:5px;font-size:16px;" title="Snow">❄️</button>
     </div>
-    <div style="position:fixed;bottom:80px;right:20px;display:flex;gap:5px;">
-      <button onclick="setWeather('clear')" style="background:#87CEEB;color:black;padding:5px 10px;border:none;cursor:pointer;border-radius:5px;">☀️</button>
-      <button onclick="setWeather('rain')" style="background:#3498DB;color:white;padding:5px 10px;border:none;cursor:pointer;border-radius:5px;">🌧️</button>
-      <button onclick="setWeather('snow')" style="background:#FFFFFF;color:black;padding:5px 10px;border:none;cursor:pointer;border-radius:5px;">❄️</button>
-    </div>
-    <div id="chat" style="position:fixed;bottom:80px;left:20px;max-height:200px;overflow-y:auto;color:white;background:rgba(0,0,0,0.3);padding:10px;border-radius:5px;font-family:monospace;"></div>
+    <div id="chat" style="position:fixed;bottom:90px;left:20px;max-height:200px;overflow-y:auto;color:white;background:rgba(0,0,0,0.4);padding:10px;border-radius:8px;font-family:monospace;font-size:13px;backdrop-filter:blur(5px);max-width:300px;"></div>
   `;
   document.body.appendChild(overlay);
+
+  // Add click handlers for block buttons
+  document.querySelectorAll('.block-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedBlockType = btn.dataset.type;
+      updateBlockSelectorUI();
+    });
+  });
+}
+
+function updateBlockSelectorUI() {
+  document.querySelectorAll('.block-btn').forEach(btn => {
+    if (btn.dataset.type === selectedBlockType) {
+      btn.style.borderColor = '#00ff00';
+      btn.style.transform = 'scale(1.1)';
+    } else {
+      btn.style.borderColor = 'transparent';
+      btn.style.transform = 'scale(1)';
+    }
+  });
 }
 
 // ============================================
@@ -572,11 +605,12 @@ function onKeyDown(event) {
     case 'KeyS': moveState.backward = true; break;
     case 'KeyA': moveState.left = true; break;
     case 'KeyD': moveState.right = true; break;
-    case 'Digit1': selectedBlockType = 'stone'; break;
-    case 'Digit2': selectedBlockType = 'wood'; break;
-    case 'Digit3': selectedBlockType = 'brick'; break;
-    case 'Digit4': selectedBlockType = 'glass'; break;
-    case 'Digit5': selectedBlockType = 'torch'; break;
+    case 'Space': if (isGrounded) { velocityY = jumpForce; isGrounded = false; } break;
+    case 'Digit1': selectedBlockType = 'stone'; updateBlockSelectorUI(); break;
+    case 'Digit2': selectedBlockType = 'wood'; updateBlockSelectorUI(); break;
+    case 'Digit3': selectedBlockType = 'brick'; updateBlockSelectorUI(); break;
+    case 'Digit4': selectedBlockType = 'glass'; updateBlockSelectorUI(); break;
+    case 'Digit5': selectedBlockType = 'torch'; updateBlockSelectorUI(); break;
     case 'KeyT': const msg = prompt('Message:'); if (msg) socket.emit('chat:message', { message: msg }); break;
   }
 }
@@ -604,6 +638,146 @@ function updatePlayer(delta) {
 }
 
 // ============================================
+// PLAYER PHYSICS & COLLISION
+// ============================================
+
+const playerHeight = 1.8;
+const playerRadius = 0.3;
+let velocityY = 0;
+let isGrounded = false;
+const gravity = 30;
+const jumpForce = 10;
+
+function checkCollision(x, y, z) {
+  // Check if position collides with any block
+  const playerMinX = x - playerRadius, playerMaxX = x + playerRadius;
+  const playerMinY = y, playerMaxY = y + playerHeight;
+  const playerMinZ = z - playerRadius, playerMaxZ = z + playerRadius;
+
+  for (const [key, mesh] of blocks) {
+    const [bx, by, bz] = key.split(',').map(Number);
+    const blockMinX = bx - 0.5, blockMaxX = bx + 0.5;
+    const blockMinY = by - 0.5, blockMaxY = by + 0.5;
+    const blockMinZ = bz - 0.5, blockMaxZ = bz + 0.5;
+
+    if (playerMaxX > blockMinX && playerMinX < blockMaxX &&
+        playerMaxY > blockMinY && playerMinY < blockMaxY &&
+        playerMaxZ > blockMinZ && playerMinZ < blockMaxZ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function updatePlayerPhysics(delta) {
+  if (!isPointerLocked) return;
+
+  // Apply gravity
+  if (!isGrounded) {
+    velocityY -= gravity * delta;
+  }
+
+  // Calculate horizontal movement
+  const speed = 10;
+  const direction = new THREE.Vector3();
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  forward.y = 0;
+  forward.normalize();
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+  right.y = 0;
+  right.normalize();
+
+  if (moveState.forward) direction.add(forward);
+  if (moveState.backward) direction.sub(forward);
+  if (moveState.left) direction.sub(right);
+  if (moveState.right) direction.add(right);
+  direction.normalize();
+
+  // Try to move
+  const newX = camera.position.x + direction.x * speed * delta;
+  const newZ = camera.position.z + direction.z * speed * delta;
+
+  // Horizontal collision detection
+  if (!checkCollision(newX, camera.position.y, camera.position.z)) {
+    camera.position.x = newX;
+  }
+  if (!checkCollision(camera.position.x, camera.position.y, newZ)) {
+    camera.position.z = newZ;
+  }
+
+  // Vertical movement
+  const newY = camera.position.y + velocityY * delta;
+  if (checkCollision(camera.position.x, newY, camera.position.z)) {
+    if (velocityY < 0) {
+      isGrounded = true;
+      // Snap to top of block
+      camera.position.y = Math.ceil(camera.position.y) + 0.5;
+    }
+    velocityY = 0;
+  } else {
+    isGrounded = false;
+    camera.position.y = newY;
+  }
+
+  // World boundaries
+  const worldHalf = CONFIG.WORLD_SIZE / 2;
+  camera.position.x = Math.max(-worldHalf + 1, Math.min(worldHalf - 1, camera.position.x));
+  camera.position.z = Math.max(-worldHalf + 1, Math.min(worldHalf - 1, camera.position.z));
+  camera.position.y = Math.max(1, camera.position.y); // Prevent falling below world
+
+  // Fall reset
+  if (camera.position.y < -10) {
+    camera.position.set(0, 5, 0);
+    velocityY = 0;
+  }
+}
+
+// ============================================
+// GHOST BLOCK (Placement Preview)
+// ============================================
+
+let ghostBlock = null;
+
+function createGhostBlock() {
+  const geometry = new THREE.BoxGeometry(CONFIG.BLOCK_SIZE * 0.99, CONFIG.BLOCK_SIZE * 0.99, CONFIG.BLOCK_SIZE * 0.99);
+  const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, depthTest: false });
+  ghostBlock = new THREE.Mesh(geometry, material);
+  ghostBlock.visible = false;
+  ghostBlock.renderOrder = 999;
+  scene.add(ghostBlock);
+}
+
+function updateGhostBlock() {
+  if (!isPointerLocked || !ghostBlock) return;
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+  const blockMeshes = Array.from(blocks.values());
+  const intersects = raycaster.intersectObjects(blockMeshes);
+
+  if (intersects.length > 0) {
+    const hit = intersects[0];
+    const nx = Math.floor(hit.point.x + hit.face.normal.x * 0.5);
+    const ny = Math.floor(hit.point.y + hit.face.normal.y * 0.5);
+    const nz = Math.floor(hit.point.z + hit.face.normal.z * 0.5);
+
+    // Check if space is empty
+    const key = `${nx},${ny},${nz}`;
+    if (!blocks.has(key)) {
+      ghostBlock.position.set(nx, ny, nz);
+      ghostBlock.visible = true;
+
+      // Change color based on distance
+      const dist = camera.position.distanceTo(new THREE.Vector3(nx, ny, nz));
+      ghostBlock.material.color.setHex(dist > 10 ? 0xff0000 : 0x00ff00);
+      ghostBlock.material.opacity = Math.max(0.2, 0.5 - dist * 0.02);
+      return;
+    }
+  }
+  ghostBlock.visible = false;
+}
+
+// ============================================
 // MOUSE
 // ============================================
 
@@ -616,17 +790,36 @@ function onInitialClick(event) {
 
 function onMouseClick(event) {
   if (!isPointerLocked) { renderer.domElement.requestPointerLock(); return; }
+
+  // Use ghost block position if visible
+  if (ghostBlock && ghostBlock.visible) {
+    if (event.shiftKey) {
+      // Remove block at ghost position
+      removeBlockAt(ghostBlock.position.x, ghostBlock.position.y, ghostBlock.position.z);
+    } else {
+      // Place block at ghost position
+      placeBlock(ghostBlock.position.x, ghostBlock.position.y, ghostBlock.position.z);
+    }
+    return;
+  }
+
+  // Fallback: Raycast directly
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
   const blockMeshes = Array.from(blocks.values());
-  console.log('Raycasting against', blockMeshes.length, 'blocks');
   const intersects = raycaster.intersectObjects(blockMeshes);
-  console.log('Intersects:', intersects.length);
+
   if (intersects.length > 0) {
     const hit = intersects[0];
-    console.log('Hit:', hit.object.position, 'face normal:', hit.face.normal);
-    if (event.shiftKey) { const pos = hit.object.position; removeBlockAt(pos.x, pos.y, pos.z); }
-    else { const normal = hit.face.normal; const pos = hit.object.position; const newPos = { x: Math.round(pos.x + normal.x), y: Math.round(pos.y + normal.y), z: Math.round(pos.z + normal.z) }; console.log('Placing block at', newPos); placeBlock(newPos.x, newPos.y, newPos.z); }
+    if (event.shiftKey) {
+      const pos = hit.object.position;
+      removeBlockAt(pos.x, pos.y, pos.z);
+    } else {
+      const nx = Math.floor(hit.point.x + hit.face.normal.x * 0.5);
+      const ny = Math.floor(hit.point.y + hit.face.normal.y * 0.5);
+      const nz = Math.floor(hit.point.z + hit.face.normal.z * 0.5);
+      placeBlock(nx, ny, nz);
+    }
   }
 }
 
@@ -759,6 +952,8 @@ function animate() {
   updateClouds(delta);
   updateWeather(delta);
   updatePlayer(delta);
+  updatePlayerPhysics(delta);  // Physics & collision
+  updateGhostBlock();  // Ghost block preview
   updateTimeDisplay();
   renderer.render(scene, camera);
 }
