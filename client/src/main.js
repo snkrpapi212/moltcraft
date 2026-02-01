@@ -674,13 +674,17 @@ function displayChatMessage(from, message) {
 // ============================================
 
 function connectToServer(url, agentData) {
+  // Force polling transport only for Railway (no WebSocket support)
+  // Using forceWebsockets: false to prevent upgrade attempts
   socket = io(url, {
-    transports: ['polling'],  // Only polling for Railway compatibility
+    transports: ['polling'],
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
     timeout: 10000,
-    autoConnect: true
+    autoConnect: true,
+    upgrade: false,  // Prevent transport upgrade
+    rememberUpgrade: false  // Don't remember WebSocket preference
   });
 
   // Connection event handlers
