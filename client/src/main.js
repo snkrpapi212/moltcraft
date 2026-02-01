@@ -663,16 +663,67 @@ function displayChatMessage(from, message) {
 // ============================================
 
 function connectToServer(url, agentData) {
-  socket = io(url);
-  socket.on('connect', () => { console.log('Connected to server:', url); socket.emit('agent:join', agentData); });
-  socket.on('agent:joined', (data) => { myAgentId = data.id; console.log('My agent ID:', myAgentId); });
-  socket.on('world:state', (data) => { data.blocks?.forEach(addBlock); data.agents?.forEach(addAgent); });
+  socket = io(url, {
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    timeout: 10000,
+    autoConnect: true
+  });
+
+  // Connection event handlers
+  socket.on('connect', () => {
+    console.log('Connected to server:', url);
+    // Use agent:spawn to match server
+    socket.emit('agent:spawn', agentData);
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('Socket connection error:', error.message);
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log('Disconnected from server:', reason);
+  });
+
+  socket.on('reconnect', (attemptNumber) => {
+    console.log('Reconnected after', attemptNumber, 'attempts');
+  });
+
+  // Event listeners - ensure proper acknowledgement
+  socket.on('agent:joined', (data) => {
+    myAgentId = data.id;
+    console.log('My agent ID:', myAgentId);
+  });
+
+  socket.on('world:state', (data) => {
+    if (data.blocks && Array.isArray(data.blocks)) {
+      data.blocks.forEach(addBlock);
+    }
+    if (data.agents && Array.isArray(data.agents)) {
+      data.agents.forEach(addAgent);
+    }
+  });
+
   socket.on('block:placed', addBlock);
   socket.on('block:removed', removeBlock);
-  socket.on('agent:joined', addAgent);
   socket.on('agent:moved', updateAgent);
-  socket.on('agent:left', (data) => removeAgent(data.id));
-  socket.on('chat:message', (data) => displayChatMessage(data.from, data.message));
+  socket.on('agent:left', (data) => {
+    if (data && data.id) removeAgent(data.id);
+  });
+
+  // Chat message - server sends 'chat:broadcast', not 'chat:message'
+  socket.on('chat:broadcast', (data) => {
+    if (data && data.from && data.message) {
+      displayChatMessage(data.from, data.message);
+    }
+  });
+
+  // Handle unknown events gracefully
+  socket.onAny((event, ...args) => {
+    console.log('Received event:', event);
+  });
 }
 
 // ============================================

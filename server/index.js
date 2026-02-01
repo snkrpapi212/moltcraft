@@ -43,7 +43,13 @@ const io = new Server(server, {
   transports: ['polling', 'websocket'],
   allowUpgrades: true,
   perMessageDeflate: false,
-  httpCompression: false
+  httpCompression: false,
+  connectTimeout: 10000
+});
+
+// Handle connection errors gracefully
+io.engine.on('connection_error', (err) => {
+  console.error('Socket.io connection error:', err.message);
 });
 
 // ============================================
@@ -160,24 +166,43 @@ io.on('connection', (socket) => {
   }
   
   /**
-   * Handle agent spawn request
-   * @event agent:spawn
+   * Handle agent spawn request (supports both agent:spawn and agent:join for compatibility)
+   * @event agent:spawn / agent:join
    * @param {Object} data - Spawn data
    * @param {string} data.name - Agent name
    * @param {string} data.color - Avatar color (hex)
    * @param {string} data.avatar - Avatar type
    */
-  socket.on('agent:spawn', (data) => {
-    world.agents[socket.id] = {
+  const handleAgentSpawn = (data) => {
+    if (world.agents[socket.id]) {
+      // Agent already spawned, just update
+      world.agents[socket.id].name = data.name || world.agents[socket.id].name;
+      world.agents[socket.id].color = data.color || world.agents[socket.id].color;
+    } else {
+      world.agents[socket.id] = {
+        id: socket.id,
+        name: data.name || 'Unknown',
+        color: data.color || '#ff6600',
+        position: { x: 0, y: 1, z: 0 },
+        avatar: data.avatar || 'box'
+      };
+    }
+
+    // Send confirmation to the joining agent first
+    socket.emit('agent:joined', {
       id: socket.id,
-      name: data.name || 'Unknown',
-      color: data.color || '#ff6600',
-      position: { x: 0, y: 1, z: 0 },
-      avatar: data.avatar || 'box'
-    };
+      name: world.agents[socket.id].name,
+      color: world.agents[socket.id].color,
+      position: world.agents[socket.id].position
+    });
+
+    // Then broadcast to other agents
     broadcastAgentEvent('agent:joined', world.agents[socket.id]);
     console.log(`Agent spawned: ${world.agents[socket.id].name}`);
-  });
+  };
+
+  socket.on('agent:spawn', handleAgentSpawn);
+  socket.on('agent:join', handleAgentSpawn); // Backward compatibility
   
   /**
    * Handle agent movement
@@ -186,13 +211,16 @@ io.on('connection', (socket) => {
    * @param {Position} data.position - New position
    */
   socket.on('agent:move', (data) => {
-    if (world.agents[socket.id]) {
-      world.agents[socket.id].position = data.position;
-      // Broadcast to other agents (not sender)
-      socket.broadcast.emit('agent:moved', { 
-        id: socket.id, 
-        position: data.position 
-      });
+    if (world.agents[socket.id] && data.position) {
+      // Validate position
+      if (typeof data.position.x === 'number' && typeof data.position.y === 'number' && typeof data.position.z === 'number') {
+        world.agents[socket.id].position = data.position;
+        // Broadcast to other agents (not sender)
+        socket.broadcast.emit('agent:moved', {
+          id: socket.id,
+          position: data.position
+        });
+      }
     }
   });
   
@@ -206,20 +234,30 @@ io.on('connection', (socket) => {
    * @param {string} data.color - Block color (hex)
    */
   socket.on('block:place', (data) => {
+    // Validate input
+    if (typeof data.x !== 'number' || typeof data.y !== 'number' || typeof data.z !== 'number') {
+      console.warn('Invalid block placement data:', data);
+      return;
+    }
+
     const key = getBlockKey(data.x, data.y, data.z);
-    world.blocks[key] = { color: data.color || "#8B4513", type: data.type || "stone" };
-    
+    world.blocks[key] = {
+      color: data.color || '#8B4513',
+      type: data.type || 'stone'
+    };
+
     // Broadcast block placement to all agents
-    io.emit('block:placed', { 
-      x: data.x, 
-      y: data.y, 
-      z: data.z, 
-      color: world.blocks[key].color, type: world.blocks[key].type 
+    io.emit('block:placed', {
+      x: data.x,
+      y: data.y,
+      z: data.z,
+      color: world.blocks[key].color,
+      type: world.blocks[key].type
     });
-    
+
     saveWorld();
   });
-  
+
   /**
    * Handle block removal
    * @event block:remove
@@ -229,16 +267,22 @@ io.on('connection', (socket) => {
    * @param {number} data.z - Z coordinate
    */
   socket.on('block:remove', (data) => {
+    // Validate input
+    if (typeof data.x !== 'number' || typeof data.y !== 'number' || typeof data.z !== 'number') {
+      console.warn('Invalid block removal data:', data);
+      return;
+    }
+
     const key = getBlockKey(data.x, data.y, data.z);
     delete world.blocks[key];
-    
+
     // Broadcast block removal to all agents
-    io.emit('block:removed', { 
-      x: data.x, 
-      y: data.y, 
-      z: data.z 
+    io.emit('block:removed', {
+      x: data.x,
+      y: data.y,
+      z: data.z
     });
-    
+
     saveWorld();
   });
   
@@ -251,25 +295,26 @@ io.on('connection', (socket) => {
   socket.on('chat:message', (data) => {
     if (world.agents[socket.id] && data.message) {
       const message = data.message.substring(0, 500); // Limit message length
-      io.emit('chat:broadcast', { 
-        from: world.agents[socket.id].name, 
+      // Use chat:message to match client expectation
+      io.emit('chat:message', {
+        from: world.agents[socket.id].name,
         message: message,
         timestamp: new Date().toISOString()
       });
     }
   });
-  
+
   /**
    * Handle agent disconnect
    */
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
     const agent = world.agents[socket.id];
     if (agent) {
-      console.log(`Agent disconnected: ${agent.name}`);
+      console.log(`Agent disconnected: ${agent.name} (${reason})`);
       delete world.agents[socket.id];
       broadcastAgentEvent('agent:left', agent);
     } else {
-      console.log(`Socket disconnected: ${socket.id}`);
+      console.log(`Socket disconnected: ${socket.id} (${reason})`);
     }
   });
 });
