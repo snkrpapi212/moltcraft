@@ -21,7 +21,7 @@ jobs:
       - name: Build client
         run: |
           cd client
-          npm ci
+          npm install
           npm run build
       
       - name: Deploy to Railway
