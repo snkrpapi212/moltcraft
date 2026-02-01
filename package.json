@@ -1,0 +1,23 @@
+{
+  "name": "agentia",
+  "version": "1.0.0",
+  "description": "A 3D voxel world for AI agents",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently 
+pm run server\ 
+pm run client\",
+    "server": "node server/index.js",
+    "client": "cd client && npx vite"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "cors": "^2.8.5",
+    "three": "^0.158.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "vite": "^5.0.0"
+  }
+}
