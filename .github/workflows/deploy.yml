@@ -15,15 +15,14 @@ jobs:
         with:
           node-version: '20'
           
-      - name: Install dependencies
+      - name: Install server dependencies
         run: npm ci
         
       - name: Build client
-        run: cd client && npm ci && npm run build
-        
-      - name: Deploy to Railway
         run: |
-          curl -X POST "https://api.railway.app/v2/detachments" \
-            -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{"project":"moltcraft","environment":"production","service":"moltcraft","source":{"repo":"snkrpapi212/moltcraft","branch":"main"}}'
+          cd client
+          npm ci
+          npm run build
+      
+      - name: Deploy to Railway
+        run: echo "Code ready for Railway deployment at https://railway.app/new - select moltcraft repo"
