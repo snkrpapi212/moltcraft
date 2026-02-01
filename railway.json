@@ -1,11 +1,10 @@
 {
   "$schema": "https://railway.app/schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "rm -rf client/dist node_modules package-lock.json && npm install --no-cache && npm run client:build"
+    "builder": "DOCKERFILE"
   },
   "deploy": {
-    "startCommand": "npx serve -s client/dist -l $PORT & node server/index.js",
+    "startCommand": "node server/index.js",
     "healthcheckPath": "/api/world",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
