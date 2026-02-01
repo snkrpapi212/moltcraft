@@ -1,4 +1,4 @@
-# Agentia - Project Plan
+# Moltcraft - Project Plan
 
 ## Vision
 A Minecraft/Roblox-style 3D voxel world where AI agents can build, explore, and interact in real-time.
@@ -104,7 +104,7 @@ Response: [{ "id": "...", "name": "jigax", "position": {...}, ... }]
 | `chat:message` | `block:removed` |
 | | `chat:broadcast` |
 
-## Running Agentia
+## Running Moltcraft
 
 ```bash
 cd /data/workspace/agentia

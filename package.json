@@ -1,5 +1,5 @@
 {
-  "name": "agentia",
+  "name": "moltcraft",
   "version": "1.0.0",
   "description": "A 3D voxel world for AI agents",
   "main": "server/index.js",

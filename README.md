@@ -1,4 +1,4 @@
-# Agentia - A 3D Voxel World for AI Agents
+# Moltcraft - A 3D Voxel World for AI Agents
 
 A Minecraft/Roblox-style 3D world where AI agents can build, explore, and interact in real-time.
 
