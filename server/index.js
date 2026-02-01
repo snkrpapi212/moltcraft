@@ -135,8 +135,16 @@ function broadcastAgentEvent(event, agent) {
 io.on('connection', (socket) => {
   console.log(`Agent connected: ${socket.id}`);
   
-  // Send current world state to new agent
-  socket.emit('world:state', world.blocks);
+  // Send current world state to new agent (transform to array format)
+  const blocksArray = Object.entries(world.blocks).map(([key, value]) => {
+    const [x, y, z] = key.split(',').map(Number);
+    if (typeof value === 'string') {
+      return { x, y, z, color: value, type: 'stone' };
+    } else {
+      return { x, y, z, color: value.color, type: value.type || 'stone' };
+    }
+  });
+  socket.emit('world:state', { blocks: blocksArray, agents: Object.values(world.agents) });
   
   // Broadcast existing agents to new connection
   const agentList = Object.values(world.agents);
@@ -192,14 +200,14 @@ io.on('connection', (socket) => {
    */
   socket.on('block:place', (data) => {
     const key = getBlockKey(data.x, data.y, data.z);
-    world.blocks[key] = data.color || '#8B4513';
+    world.blocks[key] = { color: data.color || "#8B4513", type: data.type || "stone" } || '#8B4513';
     
     // Broadcast block placement to all agents
     io.emit('block:placed', { 
       x: data.x, 
       y: data.y, 
       z: data.z, 
-      color: world.blocks[key] 
+      color: world.blocks[key].color, type: world.blocks[key].type 
     });
     
     saveWorld();
@@ -268,7 +276,17 @@ io.on('connection', (socket) => {
  * Returns all placed blocks in the world
  */
 app.get('/api/world', (req, res) => {
-  res.json(world.blocks);
+  // Transform from {"x,y,z": "#color"} to [{x, y, z, color, type}]
+  const blocks = Object.entries(world.blocks).map(([key, value]) => {
+    const [x, y, z] = key.split(',').map(Number);
+    // Handle both old format (string color) and new format (object)
+    if (typeof value === 'string') {
+      return { x, y, z, color: value, type: 'stone' };
+    } else {
+      return { x, y, z, color: value.color, type: value.type || 'stone' };
+    }
+  });
+  res.json(blocks);
 });
 
 /**
@@ -335,12 +353,12 @@ app.post('/api/move', (req, res) => {
  * }
  */
 app.post('/api/block', (req, res) => {
-  const { action, x, y, z, color } = req.body;
+  const { action, x, y, z, color, type } = req.body;
   const key = getBlockKey(x, y, z);
   
   if (action === 'place') {
-    world.blocks[key] = color || '#8B4513';
-    io.emit('block:placed', { x, y, z, color: world.blocks[key] });
+    world.blocks[key] = { color: color || '#8B4513', type: type || 'stone' };
+    io.emit('block:placed', { x, y, z, color: world.blocks[key].color, type: world.blocks[key].type });
   } else if (action === 'remove') {
     delete world.blocks[key];
     io.emit('block:removed', { x, y, z });
@@ -353,10 +371,23 @@ app.post('/api/block', (req, res) => {
 });
 
 // ============================================
+// STATIC FILE SERVING (for production)
+// ============================================
+
+const clientPath = path.join(__dirname, '..', 'client', 'dist');
+if (fs.existsSync(clientPath)) {
+  app.use(express.static(clientPath));
+  // Serve index.html for SPA routing
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientPath, 'index.html'));
+  });
+}
+
+// ============================================
 // SERVER STARTUP
 // ============================================
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 
 server.listen(PORT, () => {
   console.log(`
