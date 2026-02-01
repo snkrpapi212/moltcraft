@@ -22,9 +22,8 @@ jobs:
         run: cd client && npm ci && npm run build
         
       - name: Deploy to Railway
-        uses: railwayHQ/action-deploy@v1
-        with:
-          token: ${{ secrets.RAILWAY_TOKEN }}
-          project: moltcraft
-          service: moltcraft
-          env: production
+        run: |
+          curl -X POST "https://api.railway.app/v2/detachments" \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"project":"moltcraft","environment":"production","service":"moltcraft","source":{"repo":"snkrpapi212/moltcraft","branch":"main"}}'
