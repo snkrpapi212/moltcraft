@@ -40,9 +40,10 @@ const io = new Server(server, {
   },
   pingTimeout: 60000,
   pingInterval: 25000,
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   allowUpgrades: true,
-  perMessageDeflate: false
+  perMessageDeflate: false,
+  httpCompression: false
 });
 
 // ============================================
@@ -206,7 +207,7 @@ io.on('connection', (socket) => {
    */
   socket.on('block:place', (data) => {
     const key = getBlockKey(data.x, data.y, data.z);
-    world.blocks[key] = { color: data.color || "#8B4513", type: data.type || "stone" } || '#8B4513';
+    world.blocks[key] = { color: data.color || "#8B4513", type: data.type || "stone" };
     
     // Broadcast block placement to all agents
     io.emit('block:placed', { 
