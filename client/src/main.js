@@ -97,6 +97,7 @@ function initScene() {
   createWeatherSystem();
   createSkybox();
   createGhostBlock();  // Block placement preview
+  createHighlightMesh();  // Block highlight
   createUI();
   updateBlockSelectorUI();  // Initialize block selector UI
 
@@ -747,6 +748,59 @@ function createGhostBlock() {
   scene.add(ghostBlock);
 }
 
+// Unified function to calculate block placement position from raycast
+function getPlacementPosition(hit) {
+  // Get the exact hit point and add a small offset in the normal direction
+  const px = hit.point.x + hit.face.normal.x * 0.501;
+  const py = hit.point.y + hit.face.normal.y * 0.501;
+  const pz = hit.point.z + hit.face.normal.z * 0.501;
+  
+  // Round to nearest integer (block center)
+  return {
+    x: Math.round(px),
+    y: Math.round(py),
+    z: Math.round(pz)
+  };
+}
+
+// Get the block position for removal (the block being looked at)
+function getTargetBlockPosition(hit) {
+  return {
+    x: Math.round(hit.object.position.x),
+    y: Math.round(hit.object.position.y),
+    z: Math.round(hit.object.position.z)
+  };
+}
+
+// Highlight the block being looked at
+let highlightMesh = null;
+
+function createHighlightMesh() {
+  const geometry = new THREE.BoxGeometry(CONFIG.BLOCK_SIZE * 1.02, CONFIG.BLOCK_SIZE * 1.02, CONFIG.BLOCK_SIZE * 1.02);
+  const material = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, depthTest: false });
+  highlightMesh = new THREE.Mesh(geometry, material);
+  highlightMesh.visible = false;
+  highlightMesh.renderOrder = 998;
+  scene.add(highlightMesh);
+}
+
+function updateHighlightMesh() {
+  if (!isPointerLocked || !highlightMesh) return;
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+  const blockMeshes = Array.from(blocks.values());
+  const intersects = raycaster.intersectObjects(blockMeshes);
+
+  if (intersects.length > 0) {
+    const hit = intersects[0];
+    highlightMesh.position.copy(hit.object.position);
+    highlightMesh.visible = true;
+  } else {
+    highlightMesh.visible = false;
+  }
+}
+
 function updateGhostBlock() {
   if (!isPointerLocked || !ghostBlock) return;
 
@@ -757,18 +811,16 @@ function updateGhostBlock() {
 
   if (intersects.length > 0) {
     const hit = intersects[0];
-    const nx = Math.floor(hit.point.x + hit.face.normal.x * 0.5);
-    const ny = Math.floor(hit.point.y + hit.face.normal.y * 0.5);
-    const nz = Math.floor(hit.point.z + hit.face.normal.z * 0.5);
+    const pos = getPlacementPosition(hit);
 
     // Check if space is empty
-    const key = `${nx},${ny},${nz}`;
+    const key = `${pos.x},${pos.y},${pos.z}`;
     if (!blocks.has(key)) {
-      ghostBlock.position.set(nx, ny, nz);
+      ghostBlock.position.set(pos.x, pos.y, pos.z);
       ghostBlock.visible = true;
 
       // Change color based on distance
-      const dist = camera.position.distanceTo(new THREE.Vector3(nx, ny, nz));
+      const dist = camera.position.distanceTo(new THREE.Vector3(pos.x, pos.y, pos.z));
       ghostBlock.material.color.setHex(dist > 10 ? 0xff0000 : 0x00ff00);
       ghostBlock.material.opacity = Math.max(0.2, 0.5 - dist * 0.02);
       return;
@@ -791,19 +843,6 @@ function onInitialClick(event) {
 function onMouseClick(event) {
   if (!isPointerLocked) { renderer.domElement.requestPointerLock(); return; }
 
-  // Use ghost block position if visible
-  if (ghostBlock && ghostBlock.visible) {
-    if (event.shiftKey) {
-      // Remove block at ghost position
-      removeBlockAt(ghostBlock.position.x, ghostBlock.position.y, ghostBlock.position.z);
-    } else {
-      // Place block at ghost position
-      placeBlock(ghostBlock.position.x, ghostBlock.position.y, ghostBlock.position.z);
-    }
-    return;
-  }
-
-  // Fallback: Raycast directly
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
   const blockMeshes = Array.from(blocks.values());
@@ -811,14 +850,15 @@ function onMouseClick(event) {
 
   if (intersects.length > 0) {
     const hit = intersects[0];
+    
     if (event.shiftKey) {
-      const pos = hit.object.position;
+      // Remove the block we're looking at
+      const pos = getTargetBlockPosition(hit);
       removeBlockAt(pos.x, pos.y, pos.z);
     } else {
-      const nx = Math.floor(hit.point.x + hit.face.normal.x * 0.5);
-      const ny = Math.floor(hit.point.y + hit.face.normal.y * 0.5);
-      const nz = Math.floor(hit.point.z + hit.face.normal.z * 0.5);
-      placeBlock(nx, ny, nz);
+      // Place at the ghost block position (adjacent to hit)
+      const pos = getPlacementPosition(hit);
+      placeBlock(pos.x, pos.y, pos.z);
     }
   }
 }
@@ -954,6 +994,7 @@ function animate() {
   updatePlayer(delta);
   updatePlayerPhysics(delta);  // Physics & collision
   updateGhostBlock();  // Ghost block preview
+  updateHighlightMesh();  // Block highlight
   updateTimeDisplay();
   renderer.render(scene, camera);
 }
