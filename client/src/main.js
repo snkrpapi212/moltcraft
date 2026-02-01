@@ -749,17 +749,12 @@ function createGhostBlock() {
 }
 
 // Unified function to calculate block placement position from raycast
+// Simple approach: block center + normal direction (standard voxel behavior)
 function getPlacementPosition(hit) {
-  // Get the exact hit point and add a small offset in the normal direction
-  const px = hit.point.x + hit.face.normal.x * 0.501;
-  const py = hit.point.y + hit.face.normal.y * 0.501;
-  const pz = hit.point.z + hit.face.normal.z * 0.501;
-  
-  // Round to nearest integer (block center)
   return {
-    x: Math.round(px),
-    y: Math.round(py),
-    z: Math.round(pz)
+    x: Math.round(hit.object.position.x + hit.face.normal.x),
+    y: Math.round(hit.object.position.y + hit.face.normal.y),
+    z: Math.round(hit.object.position.z + hit.face.normal.z)
   };
 }
 
