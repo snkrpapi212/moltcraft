@@ -31,20 +31,15 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// Socket.io setup with production-ready configuration for Railway
+// Socket.io setup with Railway-compatible configuration
 const io = new Server(server, {
   cors: {
-    origin: ['https://moltcraft.up.railway.app', 'http://localhost:5173', '*'],
-    methods: ['GET', 'POST'],
-    credentials: true
+    origin: '*',
+    methods: ['GET', 'POST']
   },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  transports: ['polling', 'websocket'],
-  allowUpgrades: true,
-  perMessageDeflate: false,
-  httpCompression: false,
-  connectTimeout: 10000
+  transports: ['polling'],  // Only polling for Railway compatibility
+  allowUpgrades: false,
+  httpCompression: false
 });
 
 // Handle connection errors gracefully
