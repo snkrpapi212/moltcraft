@@ -603,6 +603,13 @@ function updatePlayer(delta) {
 // MOUSE
 // ============================================
 
+// Initial click handler - always active to enable pointer lock
+function onInitialClick(event) {
+  if (!isPointerLocked && event.target === renderer.domElement) {
+    renderer.domElement.requestPointerLock();
+  }
+}
+
 function onMouseClick(event) {
   if (!isPointerLocked) { renderer.domElement.requestPointerLock(); return; }
   const raycaster = new THREE.Raycaster();
@@ -632,15 +639,19 @@ function onWindowResize() {
 function onPointerLockChange() {
   isPointerLocked = document.pointerLockElement === renderer.domElement;
   if (isPointerLocked) {
+    // Remove initial click handler since pointer lock is now active
+    document.removeEventListener('click', onInitialClick);
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
-    document.addEventListener('click', onMouseClick);
+    document.addEventListener('mousedown', onMouseClick);
     document.addEventListener('mousemove', onMouseMove);
   } else {
     document.removeEventListener('keydown', onKeyDown);
     document.removeEventListener('keyup', onKeyUp);
-    document.removeEventListener('click', onMouseClick);
+    document.removeEventListener('mousedown', onMouseClick);
     document.removeEventListener('mousemove', onMouseMove);
+    // Re-add initial click handler
+    document.addEventListener('click', onInitialClick);
   }
 }
 
@@ -664,7 +675,7 @@ function displayChatMessage(from, message) {
 
 function connectToServer(url, agentData) {
   socket = io(url, {
-    transports: ['websocket', 'polling'],
+    transports: ['polling'],  // Only polling for Railway compatibility
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
@@ -749,6 +760,7 @@ window.setWeather = setWeather;
 initScene();
 animate();
 document.addEventListener('pointerlockchange', onPointerLockChange);
+document.addEventListener('click', onInitialClick);  // Always active to enable pointer lock
 
 const serverUrl = new URLSearchParams(window.location.search).get('server') || (import.meta.env.VITE_SERVER_URL || window.location.origin);
 const agentName = new URLSearchParams(window.location.search).get('name') || 'Player';
