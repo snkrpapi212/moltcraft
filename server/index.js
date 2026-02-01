@@ -72,6 +72,7 @@ let world = {
  * @property {number} z - Z coordinate
  */
 
+
 // Load persisted world data
 const WORLD_FILE = path.join(__dirname, '..', 'world.json');
 if (fs.existsSync(WORLD_FILE)) {

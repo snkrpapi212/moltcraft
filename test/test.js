@@ -23,6 +23,7 @@ function test(name, fn) {
   }
 }
 
+// assert is used by assertStrictEqual and assertDeepStrictEqual
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message || 'Assertion failed');
