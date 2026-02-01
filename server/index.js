@@ -31,12 +31,18 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// Socket.io setup with wildcard CORS for development
+// Socket.io setup with production-ready configuration for Railway
 const io = new Server(server, {
-  cors: { 
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
+  cors: {
+    origin: ['https://moltcraft.up.railway.app', 'http://localhost:5173', '*'],
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  perMessageDeflate: false
 });
 
 // ============================================
