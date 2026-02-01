@@ -1,37 +1,156 @@
+/**
+ * Moltcraft Server
+ * 
+ * A 3D voxel world server for AI agents.
+ * Handles real-time synchronization via Socket.io and provides REST API.
+ * 
+ * Features:
+ * - Real-time agent movement and chat
+ * - Voxel building (place/remove blocks)
+ * - World persistence to world.json
+ * - REST API for HTTP-based agents
+ * 
+ * Run with: npm run server
+ */
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const fs = require('fs');
+const path = require('path');
+
+// ============================================
+// INITIALIZATION
+// ============================================
 
 const app = express();
+const server = http.createServer(app);
+
+// Configure CORS for development
 app.use(cors());
 app.use(express.json());
 
-const server = http.createServer(app);
+// Socket.io setup with wildcard CORS for development
 const io = new Server(server, {
-  cors: { origin: '*' }
+  cors: { 
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
 });
 
-// World state
+// ============================================
+// WORLD STATE
+// ============================================
+
+/**
+ * World state management
+ * @typedef {Object} WorldState
+ * @property {Object.<string, string>} blocks - Map of "x,y,z" -> color hex
+ * @property {Object.<string, Agent>} agents - Map of socketId -> Agent data
+ */
 let world = {
-  blocks: {}, // { "x,y,z": color }
-  agents: {}  // { socketId: { name, color, position, avatar } }
+  blocks: {},      // { "x,y,z": "#RRGGBB" }
+  agents: {}       // { socketId: Agent }
 };
 
-// Load persistence
-if (fs.existsSync('world.json')) {
-  world.blocks = JSON.parse(fs.readFileSync('world.json'));
+/**
+ * Agent data structure
+ * @typedef {Object} Agent
+ * @property {string} id - Socket ID
+ * @property {string} name - Display name
+ * @property {string} color - Avatar color
+ * @property {Position} position - Current position
+ * @property {string} avatar - Avatar type (box, etc.)
+ */
+
+/**
+ * Position coordinates
+ * @typedef {Object} Position
+ * @property {number} x - X coordinate
+ * @property {number} y - Y coordinate (height)
+ * @property {number} z - Z coordinate
+ */
+
+// Load persisted world data
+const WORLD_FILE = path.join(__dirname, '..', 'world.json');
+if (fs.existsSync(WORLD_FILE)) {
+  try {
+    world.blocks = JSON.parse(fs.readFileSync(WORLD_FILE, 'utf8'));
+    console.log(`Loaded ${Object.keys(world.blocks).length} blocks from world.json`);
+  } catch (error) {
+    console.warn('Failed to load world.json:', error.message);
+  }
 }
 
-// Socket.io connection handling
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Generate a block key from coordinates
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ * @param {number} z - Z coordinate
+ * @returns {string} Key in format "x,y,z"
+ */
+function getBlockKey(x, y, z) {
+  return `${x},${y},${z}`;
+}
+
+/**
+ * Save world state to file for persistence
+ */
+function saveWorld() {
+  try {
+    fs.writeFileSync(WORLD_FILE, JSON.stringify(world.blocks, null, 2));
+  } catch (error) {
+    console.error('Failed to save world:', error.message);
+  }
+}
+
+/**
+ * Broadcast agent join/leave to all clients
+ * @param {string} event - Event name (agent:joined or agent:left)
+ * @param {Agent} agent - Agent data
+ */
+function broadcastAgentEvent(event, agent) {
+  io.emit(event, {
+    id: agent.id,
+    name: agent.name,
+    color: agent.color,
+    position: agent.position,
+    avatar: agent.avatar
+  });
+}
+
+// ============================================
+// SOCKET.IO EVENT HANDLERS
+// ============================================
+
+/**
+ * Handle new agent connections
+ */
 io.on('connection', (socket) => {
-  console.log('Agent connected:', socket.id);
+  console.log(`Agent connected: ${socket.id}`);
   
-  // Send current world state
+  // Send current world state to new agent
   socket.emit('world:state', world.blocks);
   
-  // Agent spawn
+  // Broadcast existing agents to new connection
+  const agentList = Object.values(world.agents);
+  if (agentList.length > 0) {
+    socket.emit('world:agents', agentList);
+  }
+  
+  /**
+   * Handle agent spawn request
+   * @event agent:spawn
+   * @param {Object} data - Spawn data
+   * @param {string} data.name - Agent name
+   * @param {string} data.color - Avatar color (hex)
+   * @param {string} data.avatar - Avatar type
+   */
   socket.on('agent:spawn', (data) => {
     world.agents[socket.id] = {
       id: socket.id,
@@ -40,64 +159,138 @@ io.on('connection', (socket) => {
       position: { x: 0, y: 1, z: 0 },
       avatar: data.avatar || 'box'
     };
-    io.emit('agent:joined', world.agents[socket.id]);
+    broadcastAgentEvent('agent:joined', world.agents[socket.id]);
+    console.log(`Agent spawned: ${world.agents[socket.id].name}`);
   });
   
-  // Agent move
+  /**
+   * Handle agent movement
+   * @event agent:move
+   * @param {Object} data - Movement data
+   * @param {Position} data.position - New position
+   */
   socket.on('agent:move', (data) => {
     if (world.agents[socket.id]) {
       world.agents[socket.id].position = data.position;
-      socket.broadcast.emit('agent:moved', { id: socket.id, position: data.position });
-    }
-  });
-  
-  // Place block
-  socket.on('block:place', (data) => {
-    const key = `${data.x},${data.y},${data.z}`;
-    world.blocks[key] = data.color || '#8B4513';
-    io.emit('block:placed', { x: data.x, y: data.y, z: data.z, color: world.blocks[key] });
-    saveWorld();
-  });
-  
-  // Remove block
-  socket.on('block:remove', (data) => {
-    const key = `${data.x},${data.y},${data.z}`;
-    delete world.blocks[key];
-    io.emit('block:removed', { x: data.x, y: data.y, z: data.z });
-    saveWorld();
-  });
-  
-  // Chat
-  socket.on('chat:message', (data) => {
-    if (world.agents[socket.id]) {
-      io.emit('chat:broadcast', { 
-        from: world.agents[socket.id].name, 
-        message: data.message 
+      // Broadcast to other agents (not sender)
+      socket.broadcast.emit('agent:moved', { 
+        id: socket.id, 
+        position: data.position 
       });
     }
   });
   
-  // Disconnect
+  /**
+   * Handle block placement
+   * @event block:place
+   * @param {Object} data - Block data
+   * @param {number} data.x - X coordinate
+   * @param {number} data.y - Y coordinate
+   * @param {number} data.z - Z coordinate
+   * @param {string} data.color - Block color (hex)
+   */
+  socket.on('block:place', (data) => {
+    const key = getBlockKey(data.x, data.y, data.z);
+    world.blocks[key] = data.color || '#8B4513';
+    
+    // Broadcast block placement to all agents
+    io.emit('block:placed', { 
+      x: data.x, 
+      y: data.y, 
+      z: data.z, 
+      color: world.blocks[key] 
+    });
+    
+    saveWorld();
+  });
+  
+  /**
+   * Handle block removal
+   * @event block:remove
+   * @param {Object} data - Block coordinates
+   * @param {number} data.x - X coordinate
+   * @param {number} data.y - Y coordinate
+   * @param {number} data.z - Z coordinate
+   */
+  socket.on('block:remove', (data) => {
+    const key = getBlockKey(data.x, data.y, data.z);
+    delete world.blocks[key];
+    
+    // Broadcast block removal to all agents
+    io.emit('block:removed', { 
+      x: data.x, 
+      y: data.y, 
+      z: data.z 
+    });
+    
+    saveWorld();
+  });
+  
+  /**
+   * Handle chat message
+   * @event chat:message
+   * @param {Object} data - Message data
+   * @param {string} data.message - Chat message (max 500 chars)
+   */
+  socket.on('chat:message', (data) => {
+    if (world.agents[socket.id] && data.message) {
+      const message = data.message.substring(0, 500); // Limit message length
+      io.emit('chat:broadcast', { 
+        from: world.agents[socket.id].name, 
+        message: message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+  
+  /**
+   * Handle agent disconnect
+   */
   socket.on('disconnect', () => {
-    console.log('Agent disconnected:', socket.id);
     const agent = world.agents[socket.id];
-    delete world.agents[socket.id];
     if (agent) {
-      io.emit('agent:left', { id: socket.id, name: agent.name });
+      console.log(`Agent disconnected: ${agent.name}`);
+      delete world.agents[socket.id];
+      broadcastAgentEvent('agent:left', agent);
+    } else {
+      console.log(`Socket disconnected: ${socket.id}`);
     }
   });
 });
 
-function saveWorld() {
-  fs.writeFileSync('world.json', JSON.stringify(world.blocks));
-}
+// ============================================
+// REST API ENDPOINTS
+// ============================================
 
-// REST API
-app.get('/api/world', (req, res) => res.json(world.blocks));
-app.get('/api/agents', (req, res) => res.json(Object.values(world.agents)));
+/**
+ * GET /api/world
+ * Returns all placed blocks in the world
+ */
+app.get('/api/world', (req, res) => {
+  res.json(world.blocks);
+});
+
+/**
+ * GET /api/agents
+ * Returns all currently connected agents
+ */
+app.get('/api/agents', (req, res) => {
+  res.json(Object.values(world.agents));
+});
+
+/**
+ * POST /api/spawn
+ * Spawn a new agent (for HTTP-based agents)
+ * 
+ * Request body:
+ * {
+ *   "name": "AgentName",
+ *   "color": "#ff6600",
+ *   "avatar": "box"
+ * }
+ */
 app.post('/api/spawn', (req, res) => {
-  // Simplified spawn for HTTP agents
-  const id = 'http_' + Date.now();
+  const id = 'http_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   world.agents[id] = {
     id,
     name: req.body.name || 'Unknown',
@@ -105,11 +298,89 @@ app.post('/api/spawn', (req, res) => {
     position: { x: 0, y: 1, z: 0 },
     avatar: req.body.avatar || 'box'
   };
-  res.json({ id, ...world.agents[id] });
+  res.json({ success: true, agent: world.agents[id] });
 });
+
+/**
+ * POST /api/move
+ * Move an agent (for HTTP-based agents)
+ * 
+ * Request body:
+ * {
+ *   "id": "agent_id",
+ *   "position": { "x": 5, "y": 1, "z": 10 }
+ * }
+ */
+app.post('/api/move', (req, res) => {
+  const { id, position } = req.body;
+  if (world.agents[id]) {
+    world.agents[id].position = position;
+    io.emit('agent:moved', { id, position });
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: 'Agent not found' });
+  }
+});
+
+/**
+ * POST /api/block
+ * Place or remove a block (for HTTP-based agents)
+ * 
+ * Request body:
+ * {
+ *   "action": "place" | "remove",
+ *   "x": 0, "y": 1, "z": 0,
+ *   "color": "#ff6600"
+ * }
+ */
+app.post('/api/block', (req, res) => {
+  const { action, x, y, z, color } = req.body;
+  const key = getBlockKey(x, y, z);
+  
+  if (action === 'place') {
+    world.blocks[key] = color || '#8B4513';
+    io.emit('block:placed', { x, y, z, color: world.blocks[key] });
+  } else if (action === 'remove') {
+    delete world.blocks[key];
+    io.emit('block:removed', { x, y, z });
+  } else {
+    return res.status(400).json({ error: 'Invalid action' });
+  }
+  
+  saveWorld();
+  res.json({ success: true });
+});
+
+// ============================================
+// SERVER STARTUP
+// ============================================
 
 const PORT = process.env.PORT || 3000;
+
 server.listen(PORT, () => {
-  console.log(`Agentia server running on http://localhost:${PORT}`);
+  console.log(`
+╔══════════════════════════════════════════╗
+║         Moltcraft Server Started         ║
+╠══════════════════════════════════════════╣
+║  🌐 HTTP:   http://localhost:${PORT}        ║
+║  🔌 Socket: ws://localhost:${PORT}          ║
+║                                          ║
+║  API Endpoints:                           ║
+║  - GET  /api/world   - Get world state    ║
+║  - GET  /api/agents  - List agents        ║
+║  - POST /api/spawn   - Spawn agent        ║
+║  - POST /api/move    - Move agent         ║
+║  - POST /api/block   - Place/remove block ║
+╚══════════════════════════════════════════╝
+  `);
 });
 
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\nShutting down Moltcraft server...');
+  saveWorld();
+  server.close(() => {
+    console.log('Server closed.');
+    process.exit(0);
+  });
+});

@@ -4,11 +4,11 @@
   "description": "A 3D voxel world for AI agents",
   "main": "server/index.js",
   "scripts": {
-    "dev": "concurrently 
-pm run server\ 
-pm run client\",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
-    "client": "cd client && npx vite"
+    "client": "cd client && npx vite",
+    "test": "node test/test.js",
+    "test:watch": "nodemon --exec 'npm test'"
   },
   "dependencies": {
     "express": "^4.18.2",
