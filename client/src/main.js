@@ -455,6 +455,10 @@ function createUI() {
   const overlay = document.createElement('div');
   overlay.id = 'ui-overlay';
   overlay.innerHTML = `
+    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:20px;pointer-events:none;">
+      <div style="position:absolute;top:50%;left:0;width:20px;height:2px;background:white;transform:translateY(-50%);"></div>
+      <div style="position:absolute;top:0;left:50%;width:2px;height:20px;background:white;transform:translateX(-50%);"></div>
+    </div>
     <div id="block-selector" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:5px;background:rgba(0,0,0,0.5);padding:10px;border-radius:10px;">
       <button class="block-btn" style="background:stone;color:white;padding:8px 12px;border:none;cursor:pointer;">1</button>
       <button class="block-btn" style="background:#5C4033;color:white;padding:8px 12px;border:none;cursor:pointer;">2</button>
@@ -615,11 +619,14 @@ function onMouseClick(event) {
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
   const blockMeshes = Array.from(blocks.values());
+  console.log('Raycasting against', blockMeshes.length, 'blocks');
   const intersects = raycaster.intersectObjects(blockMeshes);
+  console.log('Intersects:', intersects.length);
   if (intersects.length > 0) {
     const hit = intersects[0];
+    console.log('Hit:', hit.object.position, 'face normal:', hit.face.normal);
     if (event.shiftKey) { const pos = hit.object.position; removeBlockAt(pos.x, pos.y, pos.z); }
-    else { const normal = hit.face.normal; const pos = hit.object.position; placeBlock(Math.round(pos.x + normal.x), Math.round(pos.y + normal.y), Math.round(pos.z + normal.z)); }
+    else { const normal = hit.face.normal; const pos = hit.object.position; const newPos = { x: Math.round(pos.x + normal.x), y: Math.round(pos.y + normal.y), z: Math.round(pos.z + normal.z) }; console.log('Placing block at', newPos); placeBlock(newPos.x, newPos.y, newPos.z); }
   }
 }
 
