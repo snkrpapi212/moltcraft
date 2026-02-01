@@ -643,12 +643,12 @@ function onPointerLockChange() {
     document.removeEventListener('click', onInitialClick);
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
-    document.addEventListener('mousedown', onMouseClick);
+    document.addEventListener('click', onMouseClick);  // Use click, not mousedown
     document.addEventListener('mousemove', onMouseMove);
   } else {
     document.removeEventListener('keydown', onKeyDown);
     document.removeEventListener('keyup', onKeyUp);
-    document.removeEventListener('mousedown', onMouseClick);
+    document.removeEventListener('click', onMouseClick);
     document.removeEventListener('mousemove', onMouseMove);
     // Re-add initial click handler
     document.addEventListener('click', onInitialClick);
