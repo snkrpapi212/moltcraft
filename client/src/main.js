@@ -99,9 +99,10 @@ function initScene() {
   createGhostBlock();  // Block placement preview
   createHighlightMesh();  // Block highlight
   createUI();
-  updateBlockSelectorUI();  // Initialize block selector UI
+  createTouchControls();  // Mobile touch controls
 
   window.addEventListener('resize', onWindowResize);
+  updateTouchControlsVisibility();  // Set initial mobile control visibility
   console.log('Moltcraft Ultimate Scene initialized');
 }
 
@@ -972,10 +973,330 @@ function onMouseMove(event) {
   camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
 }
 
+// ============================================
+// TOUCH CONTROLS (Mobile)
+// ============================================
+
+let touchStartX = 0, touchStartY = 0;
+let isTouching = false;
+let touchMoved = false;
+let lastTapTime = 0;
+
+// Virtual joystick state
+let joystickActive = false;
+let joystickOriginX = 0, joystickOriginY = 0;
+let joystickCurrentX = 0, joystickCurrentY = 0;
+let joystickTouchId = null;
+
+function createTouchControls() {
+  // Create joystick container
+  const joystickContainer = document.createElement('div');
+  joystickContainer.id = 'joystick-container';
+  joystickContainer.style.cssText = `
+    position: fixed;
+    bottom: 100px;
+    left: 30px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    border: 2px solid rgba(255,255,255,0.3);
+    display: none;
+    touch-action: none;
+    z-index: 1000;
+  `;
+
+  // Joystick knob
+  const joystickKnob = document.createElement('div');
+  joystickKnob.id = 'joystick-knob';
+  joystickKnob.style.cssText = `
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  `;
+
+  joystickContainer.appendChild(joystickKnob);
+  document.body.appendChild(joystickContainer);
+
+  // Touch zone for camera (right side of screen)
+  const cameraTouchZone = document.createElement('div');
+  cameraTouchZone.id = 'camera-touch-zone';
+  cameraTouchZone.style.cssText = `
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 50%;
+    height: 100%;
+    touch-action: none;
+    z-index: 999;
+  `;
+  document.body.appendChild(cameraTouchZone);
+
+  // Touch zone for block placement (left side + center)
+  const blockTouchZone = document.createElement('div');
+  blockTouchZone.id = 'block-touch-zone';
+  blockTouchZone.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    touch-action: none;
+    z-index: 999;
+  `;
+  document.body.appendChild(blockTouchZone);
+
+  // Mobile block selector (larger, touch-friendly)
+  const mobileSelector = document.createElement('div');
+  mobileSelector.id = 'mobile-block-selector';
+  mobileSelector.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 15px;
+    border-radius: 15px;
+    z-index: 1000;
+    overflow-x: auto;
+    max-width: 95vw;
+  `;
+  document.body.appendChild(mobileSelector);
+
+  // Populate mobile block selector
+  const blockTypes = ['grass', 'stone', 'wood', 'leaves', 'brick', 'glass', 'cobblestone', 'torch', 'sand'];
+  blockTypes.forEach((type, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'mobile-block-btn';
+    btn.dataset.type = type;
+    const config = CONFIG.BLOCK_TYPES[type.toUpperCase()] || {};
+    const color = config.color || 0x696969;
+    btn.style.cssText = `
+      width: 50px;
+      height: 50px;
+      background: #${color.toString(16).padStart(6, '0')};
+      border: 3px solid transparent;
+      border-radius: 10px;
+      cursor: pointer;
+      flex-shrink: 0;
+    `;
+    btn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      selectedBlockType = type;
+      updateBlockSelectorUI();
+      showBlockChangeToast(type);
+    });
+    mobileSelector.appendChild(btn);
+  });
+
+  // Hide mobile controls on desktop
+  if (!isMobile()) {
+    joystickContainer.style.display = 'none';
+    mobileSelector.style.display = 'none';
+  }
+
+  // Joystick touch handlers
+  joystickContainer.addEventListener('touchstart', handleJoystickStart, { passive: false });
+  joystickContainer.addEventListener('touchmove', handleJoystickMove, { passive: false });
+  joystickContainer.addEventListener('touchend', handleJoystickEnd, { passive: false });
+
+  // Camera touch handlers
+  cameraTouchZone.addEventListener('touchstart', handleCameraTouchStart, { passive: false });
+  cameraTouchZone.addEventListener('touchmove', handleCameraTouchMove, { passive: false });
+  cameraTouchZone.addEventListener('touchend', handleCameraTouchEnd, { passive: false });
+
+  // Block placement touch handlers
+  blockTouchZone.addEventListener('touchstart', handleBlockTouch, { passive: false });
+  blockTouchZone.addEventListener('touchend', handleBlockTouchEnd, { passive: false });
+}
+
+function isMobile() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+         (window.innerWidth <= 768);
+}
+
+function handleJoystickStart(e) {
+  e.preventDefault();
+  const touch = e.changedTouches[0];
+  joystickTouchId = touch.identifier;
+  joystickOriginX = touch.clientX;
+  joystickOriginY = touch.clientY;
+  joystickCurrentX = touch.clientX;
+  joystickCurrentY = touch.clientY;
+  joystickActive = true;
+  updateJoystickVisual();
+}
+
+function handleJoystickMove(e) {
+  if (!joystickActive) return;
+  e.preventDefault();
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    if (e.changedTouches[i].identifier === joystickTouchId) {
+      joystickCurrentX = e.changedTouches[i].clientX;
+      joystickCurrentY = e.changedTouches[i].clientY;
+      updateJoystickVisual();
+      updateJoystickMovement();
+      break;
+    }
+  }
+}
+
+function handleJoystickEnd(e) {
+  if (!joystickActive) return;
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    if (e.changedTouches[i].identifier === joystickTouchId) {
+      joystickActive = false;
+      joystickTouchId = null;
+      moveState.forward = false;
+      moveState.backward = false;
+      moveState.left = false;
+      moveState.right = false;
+      updateJoystickVisual();
+      break;
+    }
+  }
+}
+
+function updateJoystickVisual() {
+  const container = document.getElementById('joystick-container');
+  const knob = document.getElementById('joystick-knob');
+  if (!container || !knob) return;
+
+  const maxDist = 35;
+  let dx = joystickCurrentX - joystickOriginX;
+  let dy = joystickCurrentY - joystickOriginY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist > maxDist) {
+    dx = (dx / dist) * maxDist;
+    dy = (dy / dist) * maxDist;
+  }
+
+  knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+  if (joystickActive) {
+    container.style.borderColor = 'rgba(0,255,0,0.6)';
+  } else {
+    container.style.borderColor = 'rgba(255,255,255,0.3)';
+  }
+}
+
+function updateJoystickMovement() {
+  if (!joystickActive) return;
+
+  const dx = joystickCurrentX - joystickOriginX;
+  const dy = joystickCurrentY - joystickOriginY;
+  const threshold = 10;
+
+  moveState.forward = dy < -threshold;
+  moveState.backward = dy > threshold;
+  moveState.left = dx < -threshold;
+  moveState.right = dx > threshold;
+}
+
+// Camera touch controls
+let cameraTouchId = null;
+
+function handleCameraTouchStart(e) {
+  e.preventDefault();
+  const touch = e.changedTouches[0];
+  cameraTouchId = touch.identifier;
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+  touchMoved = false;
+}
+
+function handleCameraTouchMove(e) {
+  if (cameraTouchId === null) return;
+  e.preventDefault();
+
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    if (e.changedTouches[i].identifier === cameraTouchId) {
+      const touch = e.changedTouches[i];
+
+      // Check if moved (for distinguishing tap from drag)
+      if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
+        touchMoved = true;
+      }
+
+      // Rotate camera based on touch movement
+      const sensitivity = 0.005;
+      camera.rotation.y -= (touch.clientX - touchStartX) * sensitivity;
+      camera.rotation.x -= (touch.clientY - touchStartY) * sensitivity;
+      camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      break;
+    }
+  }
+}
+
+function handleCameraTouchEnd(e) {
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    if (e.changedTouches[i].identifier === cameraTouchId) {
+      cameraTouchId = null;
+      break;
+    }
+  }
+}
+
+// Block placement on touch
+function handleBlockTouch(e) {
+  e.preventDefault();
+  const now = Date.now();
+
+  // Double tap to remove block
+  if (now - lastTapTime < 300) {
+    lastTapTime = 0;
+    return; // Double tap handled elsewhere
+  }
+  lastTapTime = now;
+}
+
+function handleBlockTouchEnd(e) {
+  if (touchMoved) return; // Don't place block if we were dragging
+
+  const touch = e.changedTouches[0];
+  // Use center of screen for raycasting (mobile friendly)
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+  const blockMeshes = Array.from(blocks.values());
+  const intersects = raycaster.intersectObjects(blockMeshes);
+
+  if (intersects.length > 0) {
+    const hit = intersects[0];
+    const pos = getPlacementPosition(hit);
+    placeBlock(pos.x, pos.y, pos.z);
+  }
+}
+
+function updateTouchControlsVisibility() {
+  const isMob = isMobile();
+  const joystick = document.getElementById('joystick-container');
+  const mobileSelector = document.getElementById('mobile-block-selector');
+  const cameraZone = document.getElementById('camera-touch-zone');
+  const blockZone = document.getElementById('block-touch-zone');
+
+  if (joystick) joystick.style.display = isMob ? 'block' : 'none';
+  if (mobileSelector) mobileSelector.style.display = isMob ? 'flex' : 'none';
+  if (cameraZone) cameraZone.style.display = isMob ? 'block' : 'none';
+  if (blockZone) blockZone.style.display = isMob ? 'block' : 'none';
+}
+
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  updateTouchControlsVisibility();  // Update mobile controls on resize
 }
 
 function onPointerLockChange() {
