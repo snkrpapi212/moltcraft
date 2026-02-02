@@ -989,27 +989,7 @@ let joystickCurrentX = 0, joystickCurrentY = 0;
 let joystickTouchId = null;
 
 function createTouchControls() {
-  // Prevent ALL default touch behaviors globally
-  const preventDefault = (e) => {
-    if (isMobile()) {
-      e.preventDefault();
-      e.stopPropagation();
-      return false;
-    }
-  };
-
-  // Apply to document
-  document.addEventListener('touchstart', preventDefault, { passive: false });
-  document.addEventListener('touchmove', preventDefault, { passive: false });
-  document.addEventListener('touchend', preventDefault, { passive: false });
-  document.addEventListener('touchcancel', preventDefault, { passive: false });
-
-  // Prevent pinch zoom and scroll on body
-  document.body.style.touchAction = 'none';
-  document.body.style.overscrollBehavior = 'none';
-  document.body.style.WebkitOverflowScrolling = 'auto';
-
-  // Create full-screen touch overlay
+  // Create touch overlay FIRST - before everything else
   const touchOverlay = document.createElement('div');
   touchOverlay.id = 'touch-overlay';
   touchOverlay.style.cssText = `
@@ -1018,11 +998,37 @@ function createTouchControls() {
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 9998;
+    z-index: 999998;
     touch-action: none;
     display: none;
+    pointer-events: auto;
   `;
   document.body.appendChild(touchOverlay);
+
+  // Prevent ALL touch events on document level FIRST
+  const preventAllTouch = (e) => {
+    if (isMobile() && !joystickActive && cameraTouchId === null) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  document.addEventListener('touchstart', preventAllTouch, { passive: false });
+  document.addEventListener('touchmove', preventAllTouch, { passive: false });
+  document.addEventListener('touchend', preventAllTouch, { passive: false });
+  document.addEventListener('touchcancel', preventAllTouch, { passive: false });
+
+  // Prevent pinch zoom and scroll on body
+  document.body.style.touchAction = 'none';
+  document.body.style.overflow = 'hidden';
+  document.body.style.overscrollBehavior = 'none';
+
+  // Prevent touch on canvas specifically
+  const canvas = document.getElementById('app');
+  if (canvas) {
+    canvas.style.touchAction = 'none';
+    canvas.style.pointerEvents = 'none';
+  }
 
   // Joystick container (bottom-left)
   const joystickContainer = document.createElement('div');
@@ -1031,15 +1037,15 @@ function createTouchControls() {
     position: fixed;
     bottom: 130px;
     left: 20px;
-    width: 90px;
-    height: 90px;
+    width: 100px;
+    height: 100px;
     border-radius: 50%;
     background: rgba(255,255,255,0.2);
-    border: 2px solid rgba(255,255,255,0.4);
+    border: 3px solid rgba(255,255,255,0.5);
     display: none;
     touch-action: none;
-    z-index: 10000;
-    user-select: none;
+    z-index: 999999;
+    pointer-events: auto;
   `;
 
   // Joystick knob
@@ -1049,13 +1055,13 @@ function createTouchControls() {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     background: rgba(255,255,255,0.9);
     transform: translate(-50%, -50%);
     pointer-events: none;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
   `;
 
   joystickContainer.appendChild(joystickKnob);
@@ -1063,18 +1069,21 @@ function createTouchControls() {
 
   // Joystick label
   const joystickLabel = document.createElement('div');
+  joystickLabel.id = 'joystick-label';
   joystickLabel.style.cssText = `
     position: fixed;
-    bottom: 95px;
-    left: 25px;
+    bottom: 240px;
+    left: 35px;
     color: white;
     font-family: monospace;
-    font-size: 11px;
+    font-size: 14px;
+    font-weight: bold;
     text-shadow: 1px 1px 2px black;
-    z-index: 10001;
+    z-index: 999999;
     display: none;
+    pointer-events: none;
   `;
-  joystickLabel.textContent = 'MOVE';
+  joystickLabel.textContent = 'DRAG TO MOVE';
   document.body.appendChild(joystickLabel);
 
   // Touch zone for camera (right half)
@@ -1087,8 +1096,8 @@ function createTouchControls() {
     width: 50%;
     height: 100%;
     touch-action: none;
-    z-index: 9999;
-    cursor: crosshair;
+    z-index: 999997;
+    pointer-events: auto;
   `;
   document.body.appendChild(cameraTouchZone);
 
@@ -1102,7 +1111,8 @@ function createTouchControls() {
     width: 50%;
     height: 100%;
     touch-action: none;
-    z-index: 9999;
+    z-index: 999997;
+    pointer-events: auto;
   `;
   document.body.appendChild(blockTouchZone);
 
@@ -1111,17 +1121,16 @@ function createTouchControls() {
   mobileSelector.id = 'mobile-block-selector';
   mobileSelector.style.cssText = `
     position: fixed;
-    bottom: 15px;
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 8px;
-    background: rgba(0,0,0,0.8);
-    padding: 12px;
-    border-radius: 12px;
-    z-index: 10002;
-    overflow-x: auto;
-    max-width: 98vw;
+    gap: 10px;
+    background: rgba(0,0,0,0.85);
+    padding: 15px;
+    border-radius: 15px;
+    z-index: 999999;
+    pointer-events: auto;
     touch-action: none;
   `;
   document.body.appendChild(mobileSelector);
@@ -1135,14 +1144,15 @@ function createTouchControls() {
     const config = CONFIG.BLOCK_TYPES[type.toUpperCase()] || {};
     const color = config.color || 0x696969;
     btn.style.cssText = `
-      width: 44px;
-      height: 44px;
+      width: 50px;
+      height: 50px;
       background: #${color.toString(16).padStart(6, '0')};
-      border: 2px solid transparent;
-      border-radius: 8px;
+      border: 3px solid transparent;
+      border-radius: 10px;
       cursor: pointer;
       flex-shrink: 0;
       touch-action: none;
+      pointer-events: auto;
     `;
     btn.addEventListener('touchstart', (e) => {
       e.preventDefault();
@@ -1154,7 +1164,7 @@ function createTouchControls() {
     mobileSelector.appendChild(btn);
   });
 
-  // Show/hide controls based on device type
+  // Show mobile controls
   if (isMobile()) {
     touchOverlay.style.display = 'block';
     joystickContainer.style.display = 'block';
@@ -1163,7 +1173,7 @@ function createTouchControls() {
     console.log('Mobile mode activated - touch controls enabled');
   }
 
-  // Joystick handlers
+  // Joystick handlers - with full event capture
   joystickContainer.addEventListener('touchstart', handleJoystickStart, { passive: false });
   joystickContainer.addEventListener('touchmove', handleJoystickMove, { passive: false });
   joystickContainer.addEventListener('touchend', handleJoystickEnd, { passive: false });
@@ -1182,8 +1192,21 @@ function createTouchControls() {
 }
 
 function isMobile() {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-         (window.innerWidth <= 768 && 'ontouchstart' in window);
+  // Check multiple indicators
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isSmallScreen = window.innerWidth <= 768;
+  const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  // Debug logging
+  console.log('Device detection:', {
+    userAgent: navigator.userAgent,
+    width: window.innerWidth,
+    hasTouch,
+    isSmallScreen,
+    isMobileUserAgent
+  });
+
+  return hasTouch && (isSmallScreen || isMobileUserAgent);
 }
 
 function handleJoystickStart(e) {
