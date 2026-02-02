@@ -545,6 +545,57 @@ function updateBlockSelectorUI() {
     preview.style.background = '#' + color.toString(16).padStart(6, '0');
     nameEl.textContent = selectedBlockType;
   }
+
+  // Show toast notification
+  showBlockChangeToast(selectedBlockType);
+}
+
+// Toast notification for block selection
+function showBlockChangeToast(blockType) {
+  // Remove existing toast
+  const existing = document.getElementById('block-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'block-toast';
+  toast.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 20px 40px;
+    border-radius: 10px;
+    font-family: monospace;
+    font-size: 24px;
+    z-index: 2000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  `;
+
+  const blockConfig = CONFIG.BLOCK_TYPES[blockType.toUpperCase()] || {};
+  const color = blockConfig.color || 0x696969;
+  toast.innerHTML = `
+    <div style="display:flex;align-items:center;gap:15px;">
+      <div style="width:40px;height:40px;background:#${color.toString(16).padStart(6,'0')};border-radius:5px;border:2px solid white;"></div>
+      <span>${blockType.toUpperCase()}</span>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+
+  // Fade in
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+  });
+
+  // Fade out and remove
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 200);
+  }, 800);
 }
 
 // ============================================
