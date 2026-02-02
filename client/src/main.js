@@ -458,11 +458,12 @@ function createUI() {
   const overlay = document.createElement('div');
   overlay.id = 'ui-overlay';
   overlay.innerHTML = `
-    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;pointer-events:none;z-index:1000;">
-      <div style="position:absolute;top:50%;left:0;width:24px;height:2px;background:rgba(255,255,255,0.8);transform:translateY(-50%);border-radius:1px;"></div>
-      <div style="position:absolute;top:0;left:50%;width:2px;height:24px;background:rgba(255,255,255,0.8);transform:translateX(-50%);border-radius:1px;"></div>
-      <div style="position:absolute;top:50%;left:50%;width:4px;height:4px;background:white;transform:translate(-50%,-50%);border-radius:50%;"></div>
+    <div id="crosshair" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;pointer-events:none;z-index:1000;">
+      <div style="position:absolute;top:50%;left:0;width:24px;height:3px;background:rgba(255,255,255,0.9);transform:translateY(-50%);border-radius:2px;box-shadow:0 0 4px rgba(0,0,0,0.5);"></div>
+      <div style="position:absolute;top:0;left:50%;width:3px;height:24px;background:rgba(255,255,255,0.9);transform:translateX(-50%);border-radius:2px;box-shadow:0 0 4px rgba(0,0,0,0.5);"></div>
+      <div style="position:absolute;top:50%;left:50%;width:6px;height:6px;background:white;transform:translate(-50%,-50%);border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>
     </div>
+    <div id="click-effect" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:0;height:0;pointer-events:none;z-index:999;border:3px solid rgba(255,255,255,0.8);border-radius:50%;opacity:0;">
     <div id="block-selector" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;background:rgba(0,0,0,0.6);padding:12px;border-radius:12px;backdrop-filter:blur(5px);">
       <button class="block-btn" data-type="stone" style="width:50px;height:50px;background:linear-gradient(135deg,#696969,#808080);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
         <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:white;font-weight:bold;">1</span>
@@ -838,6 +839,9 @@ function onInitialClick(event) {
 function onMouseClick(event) {
   if (!isPointerLocked) { renderer.domElement.requestPointerLock(); return; }
 
+  // Visual click feedback
+  showClickEffect();
+
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
   const blockMeshes = Array.from(blocks.values());
@@ -856,6 +860,25 @@ function onMouseClick(event) {
       placeBlock(pos.x, pos.y, pos.z);
     }
   }
+}
+
+// Visual click ripple effect
+function showClickEffect() {
+  const effect = document.getElementById('click-effect');
+  if (!effect) return;
+  
+  effect.style.transition = 'none';
+  effect.style.width = '0';
+  effect.style.height = '0';
+  effect.style.opacity = '0.8';
+  
+  // Force reflow
+  effect.offsetHeight;
+  
+  effect.style.transition = 'all 0.3s ease-out';
+  effect.style.width = '40px';
+  effect.style.height = '40px';
+  effect.style.opacity = '0';
 }
 
 function onMouseMove(event) {
