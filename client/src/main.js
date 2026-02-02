@@ -497,6 +497,11 @@ function createUI() {
       <div>🕹️ WASD: Move | SPACE: Jump</div>
       <div>🖱️ Click: Place Block | Shift+Click: Remove</div>
       <div>⌨️ 1-9/0: Select Block | T: Chat</div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+        <span>Selected:</span>
+        <div id="selected-block-preview" style="width:24px;height:24px;background:#696969;border-radius:3px;border:2px solid white;"></div>
+        <span id="selected-block-name">stone</span>
+      </div>
     </div>
     <div style="position:fixed;top:20px;right:20px;color:white;background:rgba(0,0,0,0.6);padding:12px;border-radius:8px;font-family:monospace;font-size:13px;backdrop-filter:blur(5px);">
       <div>⏰ Time: <span id="time-value">12:00</span></div>
@@ -530,6 +535,16 @@ function updateBlockSelectorUI() {
       btn.style.transform = 'scale(1)';
     }
   });
+
+  // Update visible indicator
+  const preview = document.getElementById('selected-block-preview');
+  const nameEl = document.getElementById('selected-block-name');
+  if (preview && nameEl) {
+    const blockConfig = CONFIG.BLOCK_TYPES[selectedBlockType.toUpperCase()] || {};
+    const color = blockConfig.color || 0x696969;
+    preview.style.background = '#' + color.toString(16).padStart(6, '0');
+    nameEl.textContent = selectedBlockType;
+  }
 }
 
 // ============================================
@@ -598,7 +613,9 @@ function removeBlock(data) {
 
 function placeBlock(x, y, z) {
   const blockConfig = CONFIG.BLOCK_TYPES[selectedBlockType.toUpperCase()] || {};
-  socket.emit('block:place', { x, y, z, color: '#' + (blockConfig.color || 0x696969).toString(16).padStart(6, '0'), type: selectedBlockType });
+  const colorHex = blockConfig.color || 0x696969;
+  console.log('Placing block:', selectedBlockType, 'color:', colorHex.toString(16));
+  socket.emit('block:place', { x, y, z, color: '#' + colorHex.toString(16).padStart(6, '0'), type: selectedBlockType });
 }
 
 function removeBlockAt(x, y, z) {
