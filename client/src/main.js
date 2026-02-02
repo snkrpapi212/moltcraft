@@ -464,27 +464,39 @@ function createUI() {
       <div style="position:absolute;top:50%;left:50%;width:6px;height:6px;background:white;transform:translate(-50%,-50%);border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>
     </div>
     <div id="click-effect" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:0;height:0;pointer-events:none;z-index:999;border:3px solid rgba(255,255,255,0.8);border-radius:50%;opacity:0;">
-    <div id="block-selector" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;background:rgba(0,0,0,0.6);padding:12px;border-radius:12px;backdrop-filter:blur(5px);">
-      <button class="block-btn" data-type="stone" style="width:50px;height:50px;background:linear-gradient(135deg,#696969,#808080);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
-        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:white;font-weight:bold;">1</span>
+    <div id="block-selector" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:rgba(0,0,0,0.7);padding:10px;border-radius:10px;backdrop-filter:blur(5px);max-width:90vw;overflow-x:auto;">
+      <button class="block-btn" data-type="grass" style="min-width:45px;height:45px;background:linear-gradient(180deg,#228B22 50%,#8B4513 50%);border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Grass (1)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:white;font-weight:bold;text-shadow:1px 1px 1px black;">1</span>
       </button>
-      <button class="block-btn" data-type="wood" style="width:50px;height:50px;background:linear-gradient(135deg,#5C4033,#8B4513);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
-        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:white;font-weight:bold;">2</span>
+      <button class="block-btn" data-type="stone" style="min-width:45px;height:45px;background:#696969;border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Stone (2)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:white;font-weight:bold;text-shadow:1px 1px 1px black;">2</span>
       </button>
-      <button class="block-btn" data-type="brick" style="width:50px;height:50px;background:linear-gradient(135deg,#8B0000,#A52A2A);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
-        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:white;font-weight:bold;">3</span>
+      <button class="block-btn" data-type="wood" style="min-width:45px;height:45px;background:#5C4033;border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Wood (3)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:white;font-weight:bold;text-shadow:1px 1px 1px black;">3</span>
       </button>
-      <button class="block-btn" data-type="glass" style="width:50px;height:50px;background:linear-gradient(135deg,rgba(173,216,230,0.6),rgba(135,206,235,0.8));border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
-        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:black;font-weight:bold;">4</span>
+      <button class="block-btn" data-type="leaves" style="min-width:45px;height:45px;background:rgba(34,139,34,0.9);border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Leaves (4)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:white;font-weight:bold;text-shadow:1px 1px 1px black;">4</span>
       </button>
-      <button class="block-btn" data-type="torch" style="width:50px;height:50px;background:linear-gradient(135deg,#FF6600,#FF8C00);border:3px solid transparent;border-radius:8px;cursor:pointer;position:relative;">
-        <span style="position:absolute;bottom:2px;right:4px;font-size:10px;color:black;font-weight:bold;">5</span>
+      <button class="block-btn" data-type="brick" style="min-width:45px;height:45px;background:#8B0000;border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Brick (5)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:white;font-weight:bold;text-shadow:1px 1px 1px black;">6</span>
+      </button>
+      <button class="block-btn" data-type="glass" style="min-width:45px;height:45px;background:rgba(173,216,230,0.5);border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Glass (6)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:white;font-weight:bold;text-shadow:1px 1px 1px black;">7</span>
+      </button>
+      <button class="block-btn" data-type="cobblestone" style="min-width:45px;height:45px;background:#4a4a4a;border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Cobblestone (7)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:white;font-weight:bold;text-shadow:1px 1px 1px black;">8</span>
+      </button>
+      <button class="block-btn" data-type="torch" style="min-width:45px;height:45px;background:#FF6600;border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Torch (8)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:black;font-weight:bold;">9</span>
+      </button>
+      <button class="block-btn" data-type="sand" style="min-width:45px;height:45px;background:#F4D03F;border:3px solid transparent;border-radius:6px;cursor:pointer;position:relative;" title="Sand (9)">
+        <span style="position:absolute;bottom:1px;right:3px;font-size:9px;color:black;font-weight:bold;">0</span>
       </button>
     </div>
     <div style="position:fixed;top:20px;left:20px;color:white;background:rgba(0,0,0,0.6);padding:12px;border-radius:8px;font-family:monospace;font-size:13px;backdrop-filter:blur(5px);">
       <div>🕹️ WASD: Move | SPACE: Jump</div>
       <div>🖱️ Click: Place Block | Shift+Click: Remove</div>
-      <div>⌨️ 1-5: Select Block | T: Chat</div>
+      <div>⌨️ 1-9/0: Select Block | T: Chat</div>
     </div>
     <div style="position:fixed;top:20px;right:20px;color:white;background:rgba(0,0,0,0.6);padding:12px;border-radius:8px;font-family:monospace;font-size:13px;backdrop-filter:blur(5px);">
       <div>⏰ Time: <span id="time-value">12:00</span></div>
@@ -608,11 +620,15 @@ function onKeyDown(event) {
     case 'KeyA': moveState.left = true; break;
     case 'KeyD': moveState.right = true; break;
     case 'Space': if (isGrounded) { velocityY = jumpForce; isGrounded = false; } break;
-    case 'Digit1': selectedBlockType = 'stone'; updateBlockSelectorUI(); break;
-    case 'Digit2': selectedBlockType = 'wood'; updateBlockSelectorUI(); break;
-    case 'Digit3': selectedBlockType = 'brick'; updateBlockSelectorUI(); break;
-    case 'Digit4': selectedBlockType = 'glass'; updateBlockSelectorUI(); break;
-    case 'Digit5': selectedBlockType = 'torch'; updateBlockSelectorUI(); break;
+    case 'Digit1': selectedBlockType = 'grass'; updateBlockSelectorUI(); break;
+    case 'Digit2': selectedBlockType = 'stone'; updateBlockSelectorUI(); break;
+    case 'Digit3': selectedBlockType = 'wood'; updateBlockSelectorUI(); break;
+    case 'Digit4': selectedBlockType = 'leaves'; updateBlockSelectorUI(); break;
+    case 'Digit5': selectedBlockType = 'brick'; updateBlockSelectorUI(); break;
+    case 'Digit6': selectedBlockType = 'glass'; updateBlockSelectorUI(); break;
+    case 'Digit7': selectedBlockType = 'cobblestone'; updateBlockSelectorUI(); break;
+    case 'Digit8': selectedBlockType = 'torch'; updateBlockSelectorUI(); break;
+    case 'Digit9': selectedBlockType = 'sand'; updateBlockSelectorUI(); break;
     case 'KeyT': const msg = prompt('Message:'); if (msg) socket.emit('chat:message', { message: msg }); break;
   }
 }
