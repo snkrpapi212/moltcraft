@@ -989,21 +989,26 @@ let joystickCurrentX = 0, joystickCurrentY = 0;
 let joystickTouchId = null;
 
 function createTouchControls() {
+  // Prevent pinch zoom globally on mobile
+  document.body.style.touchAction = 'none';
+  document.body.style.overscrollBehavior = 'none';
+
   // Create joystick container
   const joystickContainer = document.createElement('div');
   joystickContainer.id = 'joystick-container';
   joystickContainer.style.cssText = `
     position: fixed;
-    bottom: 100px;
+    bottom: 140px;
     left: 30px;
-    width: 120px;
-    height: 120px;
+    width: 100px;
+    height: 100px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.1);
-    border: 2px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.15);
+    border: 3px solid rgba(255,255,255,0.5);
     display: none;
     touch-action: none;
-    z-index: 1000;
+    z-index: 10000;
+    user-select: none;
   `;
 
   // Joystick knob
@@ -1013,12 +1018,13 @@ function createTouchControls() {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 50px;
-    height: 50px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.8);
     transform: translate(-50%, -50%);
     pointer-events: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
   `;
 
   joystickContainer.appendChild(joystickKnob);
@@ -1034,7 +1040,8 @@ function createTouchControls() {
     width: 50%;
     height: 100%;
     touch-action: none;
-    z-index: 999;
+    z-index: 9999;
+    user-select: none;
   `;
   document.body.appendChild(cameraTouchZone);
 
@@ -1048,7 +1055,8 @@ function createTouchControls() {
     width: 50%;
     height: 100%;
     touch-action: none;
-    z-index: 999;
+    z-index: 9999;
+    user-select: none;
   `;
   document.body.appendChild(blockTouchZone);
 
@@ -1190,16 +1198,34 @@ function updateJoystickVisual() {
 }
 
 function updateJoystickMovement() {
+  // Always reset and then set based on current joystick state
+  moveState.forward = false;
+  moveState.backward = false;
+  moveState.left = false;
+  moveState.right = false;
+
   if (!joystickActive) return;
 
   const dx = joystickCurrentX - joystickOriginX;
   const dy = joystickCurrentY - joystickOriginY;
   const threshold = 10;
 
-  moveState.forward = dy < -threshold;
-  moveState.backward = dy > threshold;
-  moveState.left = dx < -threshold;
-  moveState.right = dx > threshold;
+  // Up (forward)
+  if (dy < -threshold) {
+    moveState.forward = true;
+  }
+  // Down (backward)
+  if (dy > threshold) {
+    moveState.backward = true;
+  }
+  // Left
+  if (dx < -threshold) {
+    moveState.left = true;
+  }
+  // Right
+  if (dx > threshold) {
+    moveState.right = true;
+  }
 }
 
 // Camera touch controls
@@ -1419,6 +1445,7 @@ function animate() {
   updateGhostBlock();  // Ghost block preview
   updateHighlightMesh();  // Block highlight
   updateTimeDisplay();
+  updateJoystickMovement();  // Continuous joystick movement
   renderer.render(scene, camera);
 }
 
