@@ -19,6 +19,9 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
+const logger = require('./logger');
+const validation = require('./validation');
 
 // ============================================
 // INITIALIZATION
@@ -31,20 +34,43 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// Socket.io setup with Railway-compatible configuration
+// Rate limiting middleware for API endpoints
+const apiLimiter = rateLimit({
+  windowMs: 1000,  // 1 second window
+  max: 20,         // 20 requests per second per IP
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn('Rate limit exceeded', { ip: req.ip, path: req.path });
+    res.status(429).json({ error: 'Too many requests' });
+  }
+});
+
+// Apply stricter rate limiting to block placement
+const blockLimiter = rateLimit({
+  windowMs: 1000,
+  max: 10,  // 10 block operations per second
+  skip: (req) => req.method !== 'POST' || req.path !== '/api/block'
+});
+
+app.use('/api/', apiLimiter);
+app.use('/api/block', blockLimiter);
+
+// Socket.io setup with WebSocket-first configuration
 const io = new Server(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
   },
-  transports: ['polling'],  // Only polling for Railway compatibility
-  allowUpgrades: false,
-  httpCompression: false
+  transports: ['websocket', 'polling'],  // WebSocket first, polling fallback
+  allowUpgrades: true,  // Allow upgrade from polling to WebSocket
+  httpCompression: true
 });
 
 // Handle connection errors gracefully
 io.engine.on('connection_error', (err) => {
-  console.error('Socket.io connection error:', err.message);
+  logger.error('Socket.io connection error', { error: err.message });
 });
 
 // ============================================
@@ -86,9 +112,9 @@ const WORLD_FILE = path.join(__dirname, '..', 'world.json');
 if (fs.existsSync(WORLD_FILE)) {
   try {
     world.blocks = JSON.parse(fs.readFileSync(WORLD_FILE, 'utf8'));
-    console.log(`Loaded ${Object.keys(world.blocks).length} blocks from world.json`);
+    logger.info(`Loaded ${Object.keys(world.blocks).length} blocks from world.json`);
   } catch (error) {
-    console.warn('Failed to load world.json:', error.message);
+    logger.warn('Failed to load world.json', { error: error.message });
   }
 }
 
@@ -114,7 +140,7 @@ function saveWorld() {
   try {
     fs.writeFileSync(WORLD_FILE, JSON.stringify(world.blocks, null, 2));
   } catch (error) {
-    console.error('Failed to save world:', error.message);
+    logger.error('Failed to save world', { error: error.message });
   }
 }
 
@@ -141,7 +167,7 @@ function broadcastAgentEvent(event, agent) {
  * Handle new agent connections
  */
 io.on('connection', (socket) => {
-  console.log(`Agent connected: ${socket.id}`);
+  logger.info('Agent connected', { socketId: socket.id });
   
   // Send current world state to new agent (transform to array format)
   const blocksArray = Object.entries(world.blocks).map(([key, value]) => {
@@ -169,31 +195,40 @@ io.on('connection', (socket) => {
    * @param {string} data.avatar - Avatar type
    */
   const handleAgentSpawn = (data) => {
-    if (world.agents[socket.id]) {
-      // Agent already spawned, just update
-      world.agents[socket.id].name = data.name || world.agents[socket.id].name;
-      world.agents[socket.id].color = data.color || world.agents[socket.id].color;
-    } else {
-      world.agents[socket.id] = {
+    try {
+      // Validate agent name and color
+      if (data.name) validation.validateAgentName(data.name);
+      if (data.color) validation.validateColor(data.color);
+
+      if (world.agents[socket.id]) {
+        // Agent already spawned, just update
+        world.agents[socket.id].name = data.name || world.agents[socket.id].name;
+        world.agents[socket.id].color = data.color || world.agents[socket.id].color;
+      } else {
+        world.agents[socket.id] = {
+          id: socket.id,
+          name: data.name || 'Unknown',
+          color: data.color || '#ff6600',
+          position: { x: 0, y: 1, z: 0 },
+          avatar: data.avatar || 'box'
+        };
+      }
+
+      // Send confirmation to the joining agent first
+      socket.emit('agent:joined', {
         id: socket.id,
-        name: data.name || 'Unknown',
-        color: data.color || '#ff6600',
-        position: { x: 0, y: 1, z: 0 },
-        avatar: data.avatar || 'box'
-      };
+        name: world.agents[socket.id].name,
+        color: world.agents[socket.id].color,
+        position: world.agents[socket.id].position
+      });
+
+      // Then broadcast to other agents
+      broadcastAgentEvent('agent:joined', world.agents[socket.id]);
+      logger.info('Agent spawned', { name: world.agents[socket.id].name, socketId: socket.id });
+    } catch (error) {
+      logger.warn('Agent spawn validation failed', { error: error.message, socketId: socket.id });
+      socket.emit('error:validation', { message: error.message });
     }
-
-    // Send confirmation to the joining agent first
-    socket.emit('agent:joined', {
-      id: socket.id,
-      name: world.agents[socket.id].name,
-      color: world.agents[socket.id].color,
-      position: world.agents[socket.id].position
-    });
-
-    // Then broadcast to other agents
-    broadcastAgentEvent('agent:joined', world.agents[socket.id]);
-    console.log(`Agent spawned: ${world.agents[socket.id].name}`);
   };
 
   socket.on('agent:spawn', handleAgentSpawn);
@@ -206,16 +241,26 @@ io.on('connection', (socket) => {
    * @param {Position} data.position - New position
    */
   socket.on('agent:move', (data) => {
-    if (world.agents[socket.id] && data.position) {
-      // Validate position
-      if (typeof data.position.x === 'number' && typeof data.position.y === 'number' && typeof data.position.z === 'number') {
-        world.agents[socket.id].position = data.position;
-        // Broadcast to other agents (not sender)
-        socket.broadcast.emit('agent:moved', {
-          id: socket.id,
-          position: data.position
-        });
+    try {
+      if (!world.agents[socket.id]) {
+        throw new Error('Agent not found');
       }
+      if (!data.position) {
+        throw new Error('Position data required');
+      }
+      
+      // Validate position
+      validation.validatePosition(data.position);
+      
+      world.agents[socket.id].position = data.position;
+      // Broadcast to other agents (not sender)
+      socket.broadcast.emit('agent:moved', {
+        id: socket.id,
+        position: data.position
+      });
+    } catch (error) {
+      logger.warn('Agent move validation failed', { error: error.message, socketId: socket.id });
+      socket.emit('error:validation', { message: error.message });
     }
   });
   
@@ -229,28 +274,31 @@ io.on('connection', (socket) => {
    * @param {string} data.color - Block color (hex)
    */
   socket.on('block:place', (data) => {
-    // Validate input
-    if (typeof data.x !== 'number' || typeof data.y !== 'number' || typeof data.z !== 'number') {
-      console.warn('Invalid block placement data:', data);
-      return;
+    try {
+      // Validate input
+      validation.validateBlockPlacement(data);
+
+      const key = getBlockKey(data.x, data.y, data.z);
+      world.blocks[key] = {
+        color: data.color || '#8B4513',
+        type: data.type || 'stone'
+      };
+
+      // Broadcast block placement to all agents
+      io.emit('block:placed', {
+        x: data.x,
+        y: data.y,
+        z: data.z,
+        color: world.blocks[key].color,
+        type: world.blocks[key].type
+      });
+
+      saveWorld();
+      logger.debug('Block placed', { x: data.x, y: data.y, z: data.z });
+    } catch (error) {
+      logger.warn('Block placement validation failed', { error: error.message, socketId: socket.id });
+      socket.emit('error:validation', { message: error.message });
     }
-
-    const key = getBlockKey(data.x, data.y, data.z);
-    world.blocks[key] = {
-      color: data.color || '#8B4513',
-      type: data.type || 'stone'
-    };
-
-    // Broadcast block placement to all agents
-    io.emit('block:placed', {
-      x: data.x,
-      y: data.y,
-      z: data.z,
-      color: world.blocks[key].color,
-      type: world.blocks[key].type
-    });
-
-    saveWorld();
   });
 
   /**
@@ -262,23 +310,26 @@ io.on('connection', (socket) => {
    * @param {number} data.z - Z coordinate
    */
   socket.on('block:remove', (data) => {
-    // Validate input
-    if (typeof data.x !== 'number' || typeof data.y !== 'number' || typeof data.z !== 'number') {
-      console.warn('Invalid block removal data:', data);
-      return;
+    try {
+      // Validate input
+      validation.validateBlockRemoval(data);
+
+      const key = getBlockKey(data.x, data.y, data.z);
+      delete world.blocks[key];
+
+      // Broadcast block removal to all agents
+      io.emit('block:removed', {
+        x: data.x,
+        y: data.y,
+        z: data.z
+      });
+
+      saveWorld();
+      logger.debug('Block removed', { x: data.x, y: data.y, z: data.z });
+    } catch (error) {
+      logger.warn('Block removal validation failed', { error: error.message, socketId: socket.id });
+      socket.emit('error:validation', { message: error.message });
     }
-
-    const key = getBlockKey(data.x, data.y, data.z);
-    delete world.blocks[key];
-
-    // Broadcast block removal to all agents
-    io.emit('block:removed', {
-      x: data.x,
-      y: data.y,
-      z: data.z
-    });
-
-    saveWorld();
   });
   
   /**
@@ -288,14 +339,27 @@ io.on('connection', (socket) => {
    * @param {string} data.message - Chat message (max 500 chars)
    */
   socket.on('chat:message', (data) => {
-    if (world.agents[socket.id] && data.message) {
-      const message = data.message.substring(0, 500); // Limit message length
+    try {
+      if (!world.agents[socket.id]) {
+        throw new Error('Agent not found');
+      }
+      if (!data.message) {
+        throw new Error('Message required');
+      }
+
+      // Validate message
+      validation.validateMessage(data.message);
+      
       // Use chat:message to match client expectation
       io.emit('chat:message', {
         from: world.agents[socket.id].name,
-        message: message,
+        message: data.message,
         timestamp: new Date().toISOString()
       });
+      logger.debug('Chat message received', { from: world.agents[socket.id].name });
+    } catch (error) {
+      logger.warn('Chat message validation failed', { error: error.message, socketId: socket.id });
+      socket.emit('error:validation', { message: error.message });
     }
   });
 
@@ -305,11 +369,11 @@ io.on('connection', (socket) => {
   socket.on('disconnect', (reason) => {
     const agent = world.agents[socket.id];
     if (agent) {
-      console.log(`Agent disconnected: ${agent.name} (${reason})`);
+      logger.info('Agent disconnected', { name: agent.name, reason, socketId: socket.id });
       delete world.agents[socket.id];
       broadcastAgentEvent('agent:left', agent);
     } else {
-      console.log(`Socket disconnected: ${socket.id} (${reason})`);
+      logger.debug('Socket disconnected', { reason, socketId: socket.id });
     }
   });
 });
@@ -356,15 +420,24 @@ app.get('/api/agents', (req, res) => {
  * }
  */
 app.post('/api/spawn', (req, res) => {
-  const id = 'http_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  world.agents[id] = {
-    id,
-    name: req.body.name || 'Unknown',
-    color: req.body.color || '#ff6600',
-    position: { x: 0, y: 1, z: 0 },
-    avatar: req.body.avatar || 'box'
-  };
-  res.json({ success: true, agent: world.agents[id] });
+  try {
+    // Validate agent name and color
+    if (req.body.name) validation.validateAgentName(req.body.name);
+    if (req.body.color) validation.validateColor(req.body.color);
+
+    const id = 'http_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    world.agents[id] = {
+      id,
+      name: req.body.name || 'Unknown',
+      color: req.body.color || '#ff6600',
+      position: { x: 0, y: 1, z: 0 },
+      avatar: req.body.avatar || 'box'
+    };
+    res.json({ success: true, agent: world.agents[id] });
+  } catch (error) {
+    logger.warn('Spawn validation failed', { error: error.message, ip: req.ip });
+    res.status(400).json({ error: error.message });
+  }
 });
 
 /**
@@ -378,13 +451,25 @@ app.post('/api/spawn', (req, res) => {
  * }
  */
 app.post('/api/move', (req, res) => {
-  const { id, position } = req.body;
-  if (world.agents[id]) {
+  try {
+    const { id, position } = req.body;
+    
+    if (!id) throw new Error('Agent ID required');
+    if (!position) throw new Error('Position data required');
+    
+    // Validate position
+    validation.validatePosition(position);
+    
+    if (!world.agents[id]) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
     world.agents[id].position = position;
     io.emit('agent:moved', { id, position });
     res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Agent not found' });
+  } catch (error) {
+    logger.warn('Move validation failed', { error: error.message, ip: req.ip });
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -400,21 +485,38 @@ app.post('/api/move', (req, res) => {
  * }
  */
 app.post('/api/block', (req, res) => {
-  const { action, x, y, z, color, type } = req.body;
-  const key = getBlockKey(x, y, z);
-  
-  if (action === 'place') {
-    world.blocks[key] = { color: color || '#8B4513', type: type || 'stone' };
-    io.emit('block:placed', { x, y, z, color: world.blocks[key].color, type: world.blocks[key].type });
-  } else if (action === 'remove') {
-    delete world.blocks[key];
-    io.emit('block:removed', { x, y, z });
-  } else {
-    return res.status(400).json({ error: 'Invalid action' });
+  try {
+    const { action, x, y, z, color, type } = req.body;
+    
+    if (!action) throw new Error('Action (place/remove) required');
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      throw new Error('Invalid coordinates');
+    }
+    
+    if (action === 'place') {
+      // Validate block placement
+      validation.validateBlockPlacement({ x, y, z, color, type });
+      const key = getBlockKey(x, y, z);
+      world.blocks[key] = { color: color || '#8B4513', type: type || 'stone' };
+      io.emit('block:placed', { x, y, z, color: world.blocks[key].color, type: world.blocks[key].type });
+      logger.debug('Block placed via REST API', { x, y, z, ip: req.ip });
+    } else if (action === 'remove') {
+      // Validate block removal
+      validation.validateBlockRemoval({ x, y, z });
+      const key = getBlockKey(x, y, z);
+      delete world.blocks[key];
+      io.emit('block:removed', { x, y, z });
+      logger.debug('Block removed via REST API', { x, y, z, ip: req.ip });
+    } else {
+      return res.status(400).json({ error: 'Invalid action. Must be "place" or "remove"' });
+    }
+    
+    saveWorld();
+    res.json({ success: true });
+  } catch (error) {
+    logger.warn('Block operation validation failed', { error: error.message, action: req.body.action, ip: req.ip });
+    res.status(400).json({ error: error.message });
   }
-  
-  saveWorld();
-  res.json({ success: true });
 });
 
 // ============================================
@@ -437,12 +539,21 @@ if (fs.existsSync(clientPath)) {
 const PORT = process.env.PORT || 3002;
 
 server.listen(PORT, () => {
+  logger.info(`Moltcraft Server Started on port ${PORT}`, {
+    environment: process.env.NODE_ENV || 'development',
+    socketio_transports: 'websocket, polling',
+    static_files: fs.existsSync(path.join(__dirname, '..', 'client', 'dist'))
+  });
+  
   console.log(`
 ╔══════════════════════════════════════════╗
 ║         Moltcraft Server Started         ║
 ╠══════════════════════════════════════════╣
 ║  🌐 HTTP:   http://localhost:${PORT}        ║
 ║  🔌 Socket: ws://localhost:${PORT}          ║
+║  ✅ WebSocket: ENABLED                    ║
+║  ✅ Validation: ENABLED                   ║
+║  ✅ Rate Limiting: ENABLED                ║
 ║                                          ║
 ║  API Endpoints:                           ║
 ║  - GET  /api/world   - Get world state    ║
@@ -456,10 +567,10 @@ server.listen(PORT, () => {
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\nShutting down Moltcraft server...');
+  logger.info('Shutting down Moltcraft server...');
   saveWorld();
   server.close(() => {
-    console.log('Server closed.');
+    logger.info('Server closed gracefully');
     process.exit(0);
   });
 });

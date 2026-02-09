@@ -1,0 +1,74 @@
+version: '3.9'
+
+services:
+  # Backend API server (Node.js + Socket.io)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - LOG_LEVEL=INFO
+    ports:
+      - "3002:3002"
+    expose:
+      - "3002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/api/world"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    volumes:
+      - ./world.json:/app/world.json
+      - ./logs:/app/logs
+    networks:
+      - moltcraft
+
+  # Frontend web server (Node.js serve)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    environment:
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - moltcraft
+
+  # Reverse proxy (Nginx) - Routes frontend and backend
+  proxy:
+    image: nginx:alpine
+    container_name: moltcraft-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    networks:
+      - moltcraft
+
+networks:
+  moltcraft:
+    driver: bridge
+
+volumes:
+  world_data:
